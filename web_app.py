@@ -101,7 +101,8 @@ def logout():
 def index():
     if not (MAIL["user"] and MAIL["password"]):
         return render_template("message.html", title="Mailul nu e configurat",
-                               text="Setează MAIL_USER și MAIL_PASSWORD (parola de aplicație Yahoo) pe server.")
+                               text="Site-ul merge, dar încă nu știe din ce cont de mail să citească. "
+                                    "Setează MAIL_USER și MAIL_PASSWORD (parola de aplicație) în Render → Environment.")
     searched = "days" in request.args
     days = max(1, min(365, request.args.get("days", 7, type=int)))
     sender = request.args.get("from", DEFAULT_FROM).strip()
@@ -241,8 +242,10 @@ def export(token):
 def _friendly_error(e):
     text = str(e)
     if "AUTHENTICATIONFAILED" in text.upper() or "INVALID CREDENTIALS" in text.upper():
-        return ("Yahoo a refuzat autentificarea. Verifică adresa și folosește o parolă de aplicație "
-                "(login.yahoo.com → Securitatea contului → Generează parolă de aplicație), nu parola obișnuită.")
+        where = ("myaccount.google.com/apppasswords" if "gmail" in MAIL["server"]
+                 else "login.yahoo.com → Securitatea contului → Generează parolă de aplicație")
+        return ("Serverul de mail a refuzat autentificarea. Verifică adresa și folosește o parolă de aplicație "
+                f"({where}), nu parola obișnuită.")
     return f"Eroare: {text}"
 
 
