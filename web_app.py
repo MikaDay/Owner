@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import time
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 from functools import wraps
 from pathlib import Path
 
@@ -26,7 +26,8 @@ from flask import (Flask, abort, redirect, render_template, request, send_file,
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from mailbox_client import Mailbox
-from process_pdf import merge, order_number, page_count, process_bytes, safe_filename
+from process_pdf import first_page_text, merge, page_count, process_bytes, safe_filename
+from transport_order import build_register, parse_order
 
 app = Flask(__name__)
 # Render pune serverul în spatele unui proxy HTTPS; așa linkurile generate încep cu https://.
@@ -230,16 +231,28 @@ def _add_item(path, items, problems, name, data, message_id=""):
     except Exception as e:
         problems.append(f"{name}: nu pot citi PDF-ul ({e}).")
         return
-    number = order_number(data)
+    details = parse_order(first_page_text(data))
+    number = details["order_no"]
     (path / f"{len(items)}.pdf").write_bytes(out)
     items.append({
         "source": name,
+        "details": {k: v.isoformat() if isinstance(v, date) else v for k, v in details.items()},
+        "summary": _summary(details),
         "order_no": number,
         "name": safe_filename(f"Comanda {number}" if number else name[:-4] + "_procesat"),
         "total": page_count(data),
         "pages": pages,
         "message_id": message_id,
     })
+
+
+def _summary(d):
+    """Rândul scurt de sub fiecare document, ex. „Dragomiresti Deal → Timisoara · 30.09 · 2.300,00 RON”."""
+    route = " → ".join(p.split(", ")[-1] for p in (d["loading"], d["unloading"]) if p)
+    when = d["loading_date"].strftime("%d.%m") if d["loading_date"] else ""
+    price = (f"{d['price']:,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".") + f" {d['currency']}"
+             if d["price"] is not None else "")
+    return " · ".join(x for x in (route, when, price) if x)
 
 
 def _save_job(path, items, problems):
@@ -285,6 +298,18 @@ def export(token):
     _mark_downloaded([items[i]["message_id"] for i in chosen])
 
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+    if request.form.get("mode") == "xlsx":
+        rows = []
+        for i in chosen:
+            d = dict(items[i].get("details") or {})
+            for k in ("order_date", "loading_date", "unloading_date"):
+                d[k] = date.fromisoformat(d[k]) if d.get(k) else None
+            d["order_no"] = d.get("order_no") or names[i]
+            d["file"] = names[i] + ".pdf"
+            rows.append(d)
+        return send_file(io.BytesIO(build_register(rows)), as_attachment=True,
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                         download_name=f"registru_transporturi_{stamp}.xlsx")
     if request.form.get("mode") == "zip":
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:

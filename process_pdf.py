@@ -60,9 +60,12 @@ def merge(pdfs):
 
 
 # Numărul comenzii de pe prima pagină, ex. „Nr. comandă: TR-2026/1458”,
-# „Comanda transport nr 884213”. Ținut în sincron cu findOrderNumber() din web/index.html.
+# „Comanda transport nr 884213”, „Comanda Transport Nr. ARWY01981” (DSV). Ținut în sincron cu findOrderNumber() din web/index.html.
 _ID = r"([A-Z0-9][A-Z0-9\-/.]*\d[A-Z0-9\-/]*)"
 _ORDER_PATTERNS = [re.compile(p, re.I) for p in (
+    # „Comanda Transport Nr. ARWY01981” — numărul comenzii de transport are prioritate
+    # față de referința clientului („Nr. Comanda: S6422…”) de mai jos în pagină.
+    r"comand[aă]\s+(?:de\s+)?transport\s*(?:nr|no)\.?\s*[:#]?\s*" + _ID,
     r"(?:nr|num[aă]r|no|number)\.?\s*(?:de\s+)?(?:comand[aă]|order|transport|cmr)\s*[:#.]?\s*" + _ID,
     r"(?:comand[aă]|order|transport|cmr)(?:\s+de\s+transport)?\s*(?:nr|no|number)?\.?\s*[:#]?\s*" + _ID,
     r"\b(?:nr|no)\.?\s*[:#]?\s*" + _ID,
@@ -78,12 +81,17 @@ def find_order_number(text):
     return ""
 
 
-def order_number(data):
-    """Numărul comenzii din PDF (bytes) sau "" dacă nu e găsit (ex. PDF scanat)."""
+def first_page_text(data):
+    """Textul primei pagini, sau "" dacă nu poate fi citit (ex. PDF scanat)."""
     try:
-        return find_order_number(PdfReader(io.BytesIO(data)).pages[0].extract_text())
+        return PdfReader(io.BytesIO(data)).pages[0].extract_text() or ""
     except Exception:
         return ""
+
+
+def order_number(data):
+    """Numărul comenzii din PDF (bytes) sau "" dacă nu e găsit (ex. PDF scanat)."""
+    return find_order_number(first_page_text(data))
 
 
 def page_count(data):

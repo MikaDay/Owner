@@ -52,7 +52,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--tc); outlin
   padding: 12px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 .bar .in { max-width: 640px; margin: 0 auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .bar .count { flex: 1 1 100%; font-size: 0.85rem; color: var(--muted); }
-.bar button { flex: 1 1 0; }
+.bar button { flex: 1 1 0; white-space: nowrap; padding: 12px 10px; }
+.bar button.primary { flex-grow: 1.6; }
 .tools { display: flex; gap: 14px; font-size: 0.88rem; }
 .tools button { padding: 0; border: 0; color: var(--tc); font-weight: 500; }
 .pages { display: flex; gap: 5px; align-items: center; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); flex-wrap: wrap; }
@@ -79,6 +80,7 @@ a.cta b { color: var(--tc); }
 .doc .head { display: flex; gap: 10px; align-items: center; }
 .doc .head input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
 .doc .head input[type=text] { font-weight: 700; }
+.doc .route { font-size: 0.92rem; }
 .doc .src { font-family: var(--mono); font-size: 0.74rem; color: var(--muted); overflow-wrap: anywhere; }
 .warn { background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 8px 10px; font-size: 0.88rem; }
 .thumbs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }

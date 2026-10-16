@@ -16,6 +16,7 @@
         <input type="checkbox" name="use_{{ loop.index0 }}" value="1" checked aria-label="Include {{ it.name }}">
         <input type="text" name="name_{{ loop.index0 }}" value="{{ it.name }}" autocapitalize="off" spellcheck="false" aria-label="Nume fișier">
       </div>
+      {% if it.summary %}<div class="route">{{ it.summary }}</div>{% endif %}
       <div class="src">{{ it.source }} · {{ it.total }} pag. → {{ it.pages|join(", ") }}{% if not it.order_no %} · nr. comandă negăsit{% endif %}</div>
       {% if it.total != expected %}
       <div class="warn">Atenție: are {{ it.total }} pagini, nu {{ expected }}. Verifică miniaturile înainte să printezi.</div>
@@ -27,7 +28,8 @@
   <div class="bar"><div class="in">
     <span class="count" id="count"></span>
     <button class="primary" name="mode" value="merged">Un singur PDF</button>
-    <button name="mode" value="zip">ZIP (separate)</button>
+    <button name="mode" value="zip">ZIP</button>
+    <button name="mode" value="xlsx">Excel</button>
   </div></div>
 </form>
 

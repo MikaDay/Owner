@@ -210,6 +210,8 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
   // Kept in sync with find_order_number() in process_pdf.py.
   const ID = "([A-Z0-9][A-Z0-9\\-/.]*\\d[A-Z0-9\\-/]*)";
   const ORDER_PATTERNS = [
+    // "Comanda Transport Nr. ARWY01981" wins over the client reference "Nr. Comanda: S6422…" further down.
+    new RegExp("comand[aă]\\s+(?:de\\s+)?transport\\s*(?:nr|no)\\.?\\s*[:#]?\\s*" + ID, "i"),
     new RegExp("(?:nr|num[aă]r|no|number)\\.?\\s*(?:de\\s+)?(?:comand[aă]|order|transport|cmr)\\s*[:#.]?\\s*" + ID, "i"),
     new RegExp("(?:comand[aă]|order|transport|cmr)(?:\\s+de\\s+transport)?\\s*(?:nr|no|number)?\\.?\\s*[:#]?\\s*" + ID, "i"),
     new RegExp("\\b(?:nr|no)\\.?\\s*[:#]?\\s*" + ID, "i"),

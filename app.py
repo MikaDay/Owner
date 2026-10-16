@@ -11,10 +11,12 @@ import argparse
 import configparser
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from fetch_mail import fetch_pdfs
-from process_pdf import order_number, page_count, process_bytes, safe_filename
+from process_pdf import first_page_text, page_count, process_bytes, safe_filename
+from transport_order import build_register, parse_order
 
 
 def load_config(path):
@@ -25,7 +27,7 @@ def load_config(path):
 
 
 def process_all(files, output_dir, copies, last, expected):
-    ok, warnings = 0, []
+    ok, warnings, rows = 0, [], []
     for src in files:
         try:
             data = Path(src).read_bytes()
@@ -33,18 +35,24 @@ def process_all(files, output_dir, copies, last, expected):
         except Exception as e:  # un PDF stricat nu trebuie să oprească restul
             print(f"  EROARE {Path(src).name}: {e}")
             continue
-        number = order_number(data)
+        details = parse_order(first_page_text(data))
+        number = details["order_no"]
         name = safe_filename(f"Comanda {number}" if number else f"{Path(src).stem}_procesat")
         dst = _unique(Path(output_dir) / f"{name}.pdf")
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(out)
         ok += 1
+        rows.append({**details, "file": dst.name})
         print(f"  {Path(src).name} -> {dst.name}  (pagini: {', '.join(map(str, pages))})")
         total = page_count(data)
         if total != expected:
             warnings.append(f"{Path(src).name} are {total} pagini, nu {expected}")
     for w in warnings:
         print(f"  ATENȚIE: {w} — verifică-l înainte să printezi.")
+    if rows:
+        reg = _unique(Path(output_dir) / f"registru_{datetime.now():%Y-%m-%d_%H%M}.xlsx")
+        reg.write_bytes(build_register(rows))
+        print(f"  Registru Excel: {reg.name}")
     return ok
 
 
