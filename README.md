@@ -40,7 +40,44 @@ python app.py --local un_folder          # toate PDF-urile dintr-un folder
 Numărul de copii ale primei pagini și numărul de pagini de la final se pot schimba
 în `config.ini` (`first_page_copies`, `last_pages`).
 
-## Pe iPhone / iPad
+## Site cu conectare la mail (Yahoo) — pentru iPhone / iPad
+
+`web_app.py` e un site care se conectează la mail, îți arată mailurile cu
+PDF-uri și îți dă înapoi PDF-urile procesate: **un singur PDF** cu toate
+(gata de printat) sau un **ZIP** cu câte un PDF pentru fiecare mail.
+Mailurile deja descărcate sunt marcate, iar cele noi sunt bifate automat.
+
+### 1. Parola de aplicație Yahoo
+
+login.yahoo.com → **Securitatea contului** → **Generează parolă de aplicație**
+→ copiază codul de 16 litere. (Parola obișnuită nu merge.)
+
+### 2. Găzduirea (gratuit, pe Render.com)
+
+1. Fă-ți cont pe https://render.com cu contul de GitHub.
+2. **New → Blueprint** și alege acest repo (folosește `render.yaml`).
+3. Completează variabilele:
+
+| Variabilă | Ce pui |
+|---|---|
+| `MAIL_USER` | adresa ta, ex. `nume@yahoo.com` |
+| `MAIL_PASSWORD` | parola de aplicație Yahoo (16 litere) |
+| `SITE_PASSWORD` | o parolă aleasă de tine, cerută când deschizi site-ul |
+| `FILTER_FROM` | opțional: expeditorul comenzilor, ex. `comenzi@firma.ro` |
+| `FILTER_SUBJECT` | opțional: text din subiect, ex. `transport` |
+
+4. După deploy primești o adresă de forma `https://pagini-transport.onrender.com`.
+   Deschide-o în Safari → Partajează → **Adaugă pe ecranul principal**.
+
+Pe planul gratuit site-ul „adoarme” după 15 minute fără folosire și pornește
+în ~1 minut la prima deschidere; tot acolo, marcajul „descărcat” se pierde
+la repornire (pentru a-l păstra, adaugă un disc și setează `DATA_DIR`).
+Merge și pe orice alt server: `docker build -t transport . && docker run -p 8000:8000 --env-file .env transport`.
+
+Alte setări: `MAIL_SERVER` (implicit `imap.mail.yahoo.com`; Gmail = `imap.gmail.com`),
+`MAIL_FOLDER` (implicit `INBOX`), `FIRST_PAGE_COPIES` (2), `LAST_PAGES` (3).
+
+## Pe iPhone / iPad, fără server
 
 Python nu rulează pe iOS, așa că există și o versiune web în `web/index.html`
 (folosește [pdf-lib](https://pdf-lib.js.org), totul se face local, în browser):

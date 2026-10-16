@@ -1,0 +1,23 @@
+# Deploy pe Render.com: New → Blueprint → alege acest repo.
+services:
+  - type: web
+    name: pagini-transport
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: MAIL_SERVER
+        value: imap.mail.yahoo.com
+      - key: MAIL_USER
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: SITE_PASSWORD
+        sync: false
+      - key: FILTER_FROM
+        sync: false
+      - key: FILTER_SUBJECT
+        sync: false

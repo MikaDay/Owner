@@ -5,3 +5,5 @@ procesate/
 __pycache__/
 *.pyc
 .venv/
+downloaded.json
+.env

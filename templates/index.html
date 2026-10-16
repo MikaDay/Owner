@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="top">
+  <div><div class="label">{{ account }}</div><h1>Pagini transport</h1></div>
+  <a href="{{ url_for('logout') }}">Ieși</a>
+</div>
+
+<div class="pages" aria-label="Paginile păstrate">
+  {% for _ in range(copies) %}<span class="pg tr">1</span>{% endfor %}
+  {% for i in range(last) %}<span class="pg">{{ 6 - last + i + 1 }}</span>{% endfor %}
+  <span>&nbsp;din fiecare PDF de 6 pagini</span>
+</div>
+
+<form class="search" method="get">
+  <label>Ultimele zile <input type="number" name="days" min="1" max="365" value="{{ days }}" inputmode="numeric"></label>
+  <label style="grid-column: span 2">Expeditor (opțional) <input type="text" name="from" value="{{ sender }}" placeholder="ex: comenzi@firma.ro" autocapitalize="off"></label>
+  <label class="wide">Subiectul conține (opțional) <input type="text" name="subject" value="{{ subject }}" placeholder="ex: comandă transport"></label>
+  <button class="primary wide" type="submit">Caută în mail</button>
+</form>
+
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+
+{% if searched and not error %}
+  {% if messages %}
+  <form method="post" action="{{ url_for('download') }}" id="dl">
+    <div class="top">
+      <p class="muted">{{ messages|length }} mailuri găsite. Cele noi sunt deja bifate.</p>
+      <div class="tools"><button type="button" data-sel="all">Toate</button><button type="button" data-sel="new">Doar noi</button><button type="button" data-sel="none">Niciunul</button></div>
+    </div>
+    <div class="list">
+    {% for m in messages %}
+      <label class="row">
+        <input type="checkbox" name="uid" value="{{ m.uid }}" {% if not m.downloaded %}checked{% endif %} data-new="{{ 0 if m.downloaded else 1 }}">
+        <span class="subj">{{ m.subject }}{% if m.downloaded %}<span class="badge">descărcat</span>{% endif %}</span>
+        <span class="meta">{{ m.date.strftime('%d.%m.%Y %H:%M') if m.date else '' }} · {{ m.from }}</span>
+        <input type="hidden" name="mid_{{ m.uid }}" value="{{ m.message_id }}">
+      </label>
+    {% endfor %}
+    </div>
+    <div class="bar"><div class="in">
+      <span class="count" id="count"></span>
+      <button class="primary" name="mode" value="merged">Un singur PDF</button>
+      <button name="mode" value="zip">ZIP (separate)</button>
+    </div></div>
+  </form>
+  {% else %}
+  <p class="muted">Niciun mail cu atașamente în ultimele {{ days }} zile{% if sender %} de la „{{ sender }}”{% endif %}.</p>
+  {% endif %}
+{% endif %}
+
+<script>
+(() => {
+  const form = document.getElementById("dl");
+  if (!form) return;
+  const boxes = [...form.querySelectorAll('input[name=uid]')];
+  const count = document.getElementById("count");
+  const btns = form.querySelectorAll(".bar button");
+  const update = () => {
+    const n = boxes.filter(b => b.checked).length;
+    count.textContent = n ? `${n} mailuri selectate` : "Bifează mailurile de descărcat";
+    btns.forEach(b => b.disabled = !n);
+  };
+  form.addEventListener("change", update);
+  form.querySelectorAll("[data-sel]").forEach(b => b.onclick = () => {
+    boxes.forEach(x => x.checked = b.dataset.sel === "all" || (b.dataset.sel === "new" && x.dataset.new === "1"));
+    update();
+  });
+  form.addEventListener("submit", () => {
+    count.textContent = "Se descarcă și se procesează… poate dura puțin.";
+    setTimeout(update, 15000);
+  });
+  update();
+})();
+</script>
+{% endblock %}
