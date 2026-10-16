@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block body %}
 <div class="top">
-  <div><div class="label">{{ account }}</div><h1>Cirforvest</h1></div>
+  <div><div class="label">{{ account if mail_ready else "Comandă transport · PDF" }}</div><h1>Cirforvest</h1></div>
   <a href="{{ url_for('logout') }}">Ieși</a>
 </div>
 
@@ -11,12 +11,25 @@
   <span>&nbsp;din fiecare PDF de 6 pagini</span>
 </div>
 
+<form class="upload" method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" id="up">
+  <input type="file" name="pdf" id="pdf" accept="application/pdf,.pdf" multiple>
+  <label for="pdf" class="pick" id="pick">
+    <strong>Încarcă PDF-uri</strong>
+    <small id="pickhint">Din Fișiere, iCloud Drive sau salvate din Mail. Poți alege mai multe deodată.</small>
+  </label>
+</form>
+
+{% if mail_ready %}
+<div class="label">sau caută direct în mail</div>
 <form class="search" method="get">
   <label>Ultimele zile <input type="number" name="days" min="1" max="365" value="{{ days }}" inputmode="numeric"></label>
   <label style="grid-column: span 2">Expeditor (opțional) <input type="text" name="from" value="{{ sender }}" placeholder="ex: comenzi@firma.ro" autocapitalize="off"></label>
   <label class="wide">Subiectul conține (opțional) <input type="text" name="subject" value="{{ subject }}" placeholder="ex: comandă transport"></label>
   <button class="primary wide" type="submit">Caută în mail</button>
 </form>
+{% else %}
+<p class="muted small">Căutarea directă în mail apare aici după ce conectezi contul de mail pe server.</p>
+{% endif %}
 
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
 
@@ -49,6 +62,15 @@
 {% endif %}
 
 <script>
+(() => {
+  const up = document.getElementById("up"), pdf = document.getElementById("pdf");
+  pdf.addEventListener("change", () => {
+    if (!pdf.files.length) return;
+    document.getElementById("pick").classList.add("busy");
+    document.getElementById("pickhint").textContent = `Se procesează ${pdf.files.length} PDF-uri…`;
+    up.submit();
+  });
+})();
 (() => {
   const form = document.getElementById("dl");
   if (!form) return;

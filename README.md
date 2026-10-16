@@ -42,7 +42,8 @@ Numărul de copii ale primei pagini și numărul de pagini de la final se pot sc
 
 ## Site cu conectare la mail (Yahoo) — pentru iPhone / iPad
 
-`web_app.py` e un site care se conectează la mail, îți arată mailurile cu
+`web_app.py` e un site în care poți **încărca PDF-urile direct** (merge și fără
+mail configurat) sau care se conectează la mail, îți arată mailurile cu
 PDF-uri și îți dă înapoi PDF-urile procesate: **un singur PDF** cu toate
 (gata de printat) sau un **ZIP** cu câte un PDF pentru fiecare mail.
 Mailurile deja descărcate sunt marcate, iar cele noi sunt bifate automat.

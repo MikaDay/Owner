@@ -2,7 +2,7 @@
 {% block body %}
 <div class="top">
   <div><div class="label">Verificare</div><h1>{{ items|length }} documente pregătite</h1></div>
-  <a href="javascript:history.back()">Înapoi la mailuri</a>
+  <a href="{{ url_for('index') }}">Înapoi</a>
 </div>
 <p class="muted">Verifică miniaturile și numele fișierelor. Apasă pe o pagină ca s-o vezi mare.</p>
 

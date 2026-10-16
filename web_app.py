@@ -30,7 +30,8 @@ app = Flask(__name__)
 # Fără SECRET_KEY, cheia e derivată din parole, ca toate procesele serverului să o folosească pe aceeași.
 app.secret_key = os.environ.get("SECRET_KEY") or hashlib.sha256(
     ("transport:" + os.environ.get("SITE_PASSWORD", "") + os.environ.get("MAIL_PASSWORD", "")).encode()).hexdigest()
-app.config.update(SESSION_COOKIE_SECURE=os.environ.get("HTTPS", "1") == "1",
+app.config.update(MAX_CONTENT_LENGTH=200 * 1024 * 1024,
+                  SESSION_COOKIE_SECURE=os.environ.get("HTTPS", "1") == "1",
                   SESSION_COOKIE_SAMESITE="Lax",
                   PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30)
 
@@ -99,11 +100,8 @@ def logout():
 @app.route("/")
 @login_required
 def index():
-    if not (MAIL["user"] and MAIL["password"]):
-        return render_template("message.html", title="Mailul nu e configurat",
-                               text="Site-ul merge, dar încă nu știe din ce cont de mail să citească. "
-                                    "Setează MAIL_USER și MAIL_PASSWORD (parola de aplicație) în Render → Environment.")
-    searched = "days" in request.args
+    mail_ready = bool(MAIL["user"] and MAIL["password"])
+    searched = mail_ready and "days" in request.args
     days = max(1, min(365, request.args.get("days", 7, type=int)))
     sender = request.args.get("from", DEFAULT_FROM).strip()
     subject = request.args.get("subject", DEFAULT_SUBJECT).strip()
@@ -119,7 +117,7 @@ def index():
             m["downloaded"] = m["message_id"] in seen
     return render_template("index.html", messages=messages, searched=searched, error=error,
                            days=days, sender=sender, subject=subject, copies=COPIES, last=LAST,
-                           account=MAIL["user"])
+                           account=MAIL["user"], mail_ready=mail_ready)
 
 
 def _jobs_dir():
@@ -149,10 +147,7 @@ def prepare():
     if not uids:
         return redirect(request.referrer or url_for("index"))
 
-    token = secrets.token_hex(16)
-    path = _jobs_dir() / token
-    path.mkdir()
-    items, problems = [], []
+    path, items, problems = _new_job()
     try:
         with Mailbox(**MAIL) as mb:
             for uid in uids:
@@ -161,32 +156,61 @@ def prepare():
                     problems.append(f"Mailul „{request.form.get(f'subj_{uid}', uid)}” nu are PDF atașat.")
                     continue
                 for name, data in pdfs:
-                    try:
-                        out, pages = process_bytes(data, COPIES, LAST, name)
-                    except Exception as e:
-                        problems.append(f"{name}: nu pot citi PDF-ul ({e}).")
-                        continue
-                    number = order_number(data)
-                    i = len(items)
-                    (path / f"{i}.pdf").write_bytes(out)
-                    items.append({
-                        "source": name,
-                        "order_no": number,
-                        "name": safe_filename(f"Comanda {number}" if number else name[:-4] + "_procesat"),
-                        "total": page_count(data),
-                        "pages": pages,
-                        "message_id": request.form.get(f"mid_{uid}", ""),
-                    })
+                    _add_item(path, items, problems, name, data, request.form.get(f"mid_{uid}", ""))
     except Exception as e:
         shutil.rmtree(path, ignore_errors=True)
         return render_template("message.html", title="Nu m-am putut conecta la mail", text=_friendly_error(e))
+    return _finish_job(path, items, problems, "Mailurile alese nu au PDF-uri.")
 
+
+@app.route("/upload", methods=["POST"])
+@login_required
+def upload():
+    """PDF-uri încărcate direct din telefon/calculator, fără mail."""
+    uploads = [f for f in request.files.getlist("pdf") if f and f.filename]
+    if not uploads:
+        return redirect(url_for("index"))
+    path, items, problems = _new_job()
+    for f in uploads:
+        name = safe_filename(Path(f.filename).name)
+        if not name.lower().endswith(".pdf"):
+            problems.append(f"{name}: nu e PDF.")
+            continue
+        _add_item(path, items, problems, name, f.read())
+    return _finish_job(path, items, problems, "Fișierele alese nu sunt PDF-uri.")
+
+
+def _new_job():
+    path = _jobs_dir() / secrets.token_hex(16)
+    path.mkdir()
+    return path, [], []
+
+
+def _add_item(path, items, problems, name, data, message_id=""):
+    try:
+        out, pages = process_bytes(data, COPIES, LAST, name)
+    except Exception as e:
+        problems.append(f"{name}: nu pot citi PDF-ul ({e}).")
+        return
+    number = order_number(data)
+    (path / f"{len(items)}.pdf").write_bytes(out)
+    items.append({
+        "source": name,
+        "order_no": number,
+        "name": safe_filename(f"Comanda {number}" if number else name[:-4] + "_procesat"),
+        "total": page_count(data),
+        "pages": pages,
+        "message_id": message_id,
+    })
+
+
+def _finish_job(path, items, problems, empty_text):
     if not items:
         shutil.rmtree(path, ignore_errors=True)
         return render_template("message.html", title="Niciun PDF procesat",
-                               text=" ".join(problems) or "Mailurile alese nu au PDF-uri.")
+                               text=" ".join(problems) or empty_text)
     (path / "job.json").write_text(json.dumps({"items": items, "problems": problems}), encoding="utf-8")
-    return redirect(url_for("review", token=token))
+    return redirect(url_for("review", token=path.name))
 
 
 @app.route("/review/<token>")

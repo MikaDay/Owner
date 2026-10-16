@@ -58,6 +58,15 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--tc); outlin
 .pages { display: flex; gap: 5px; align-items: center; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); flex-wrap: wrap; }
 .pg { width: 22px; height: 30px; border-radius: 3px; display: grid; place-items: center; border: 1.5px solid var(--tc); color: var(--tc); }
 .pg.tr { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.pick { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center;
+  border: 2px dashed var(--line); border-radius: 10px; padding: 26px 16px; cursor: pointer; background: var(--surface); }
+.pick:hover { border-color: var(--accent); }
+.pick strong { font-size: 1.1rem; }
+.pick small { color: var(--muted); }
+.pick.busy { border-color: var(--accent); border-style: solid; }
+#pdf { position: absolute; width: 1px; height: 1px; opacity: 0; }
+#pdf:focus-visible + .pick { outline: 3px solid var(--tc); outline-offset: 2px; }
+.small { font-size: 0.88rem; }
 .doc { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-bottom: 1px solid var(--line); min-width: 0; }
 .doc .head { display: flex; gap: 10px; align-items: center; }
 .doc .head input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
