@@ -22,7 +22,7 @@
 
 {% if searched and not error %}
   {% if messages %}
-  <form method="post" action="{{ url_for('download') }}" id="dl">
+  <form method="post" action="{{ url_for('prepare') }}" id="dl">
     <div class="top">
       <p class="muted">{{ messages|length }} mailuri găsite. Cele noi sunt deja bifate.</p>
       <div class="tools"><button type="button" data-sel="all">Toate</button><button type="button" data-sel="new">Doar noi</button><button type="button" data-sel="none">Niciunul</button></div>
@@ -34,13 +34,13 @@
         <span class="subj">{{ m.subject }}{% if m.downloaded %}<span class="badge">descărcat</span>{% endif %}</span>
         <span class="meta">{{ m.date.strftime('%d.%m.%Y %H:%M') if m.date else '' }} · {{ m.from }}</span>
         <input type="hidden" name="mid_{{ m.uid }}" value="{{ m.message_id }}">
+        <input type="hidden" name="subj_{{ m.uid }}" value="{{ m.subject }}">
       </label>
     {% endfor %}
     </div>
     <div class="bar"><div class="in">
       <span class="count" id="count"></span>
-      <button class="primary" name="mode" value="merged">Un singur PDF</button>
-      <button name="mode" value="zip">ZIP (separate)</button>
+      <button class="primary" type="submit">Pregătește și verifică</button>
     </div></div>
   </form>
   {% else %}
@@ -67,6 +67,7 @@
   });
   form.addEventListener("submit", () => {
     count.textContent = "Se descarcă și se procesează… poate dura puțin.";
+    btns.forEach(b => b.disabled = true);
     setTimeout(update, 15000);
   });
   update();

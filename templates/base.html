@@ -11,13 +11,15 @@
 :root {
   --bg: #f3f4f1; --surface: #fff; --fg: #1d2421; --muted: #5f6a65; --line: #d7dbd6;
   --accent: #e0a100; --accent-ink: #1d2421; --tc: #3f6e86; --ok: #2f7d4f; --err: #b3362b;
+  --warn: #9a5b00; --warn-bg: #fdf1d6; --paper: #fff; --shade: rgba(20,25,23,.82);
   --body: "Archivo", -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #141917; --surface: #1d2321; --fg: #e8ece9; --muted: #9aa5a0; --line: #333b38;
-          --accent: #f0b52a; --accent-ink: #141917; --tc: #7fb0c8; --ok: #5fbf85; --err: #ec6f63; color-scheme: dark; }
+          --accent: #f0b52a; --accent-ink: #141917; --tc: #7fb0c8; --ok: #5fbf85; --err: #ec6f63;
+          --warn: #f0c060; --warn-bg: #3a2f17; --paper: #f4f4f2; --shade: rgba(0,0,0,.85); color-scheme: dark; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.45; }
@@ -56,6 +58,23 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--tc); outlin
 .pages { display: flex; gap: 5px; align-items: center; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); flex-wrap: wrap; }
 .pg { width: 22px; height: 30px; border-radius: 3px; display: grid; place-items: center; border: 1.5px solid var(--tc); color: var(--tc); }
 .pg.tr { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.doc { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.doc .head { display: flex; gap: 10px; align-items: center; }
+.doc .head input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+.doc .head input[type=text] { font-weight: 700; }
+.doc .src { font-family: var(--mono); font-size: 0.74rem; color: var(--muted); overflow-wrap: anywhere; }
+.warn { background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 8px 10px; font-size: 0.88rem; }
+.thumbs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.thumb { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0; border: 0; background: none; cursor: zoom-in; color: var(--muted); font-family: var(--mono); font-size: 0.7rem; font-weight: 400; }
+.thumb canvas, .thumb .ph { width: 62px; display: block; background: var(--paper); border-radius: 2px; border: 2px solid var(--tc); }
+.thumb .ph { height: 88px; background: var(--surface); border-style: dashed; border-color: var(--line); }
+.thumb.tr canvas { border-color: var(--accent); }
+.viewer { position: fixed; inset: 0; z-index: 20; background: var(--shade); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: calc(16px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.viewer[hidden] { display: none; }
+.viewer canvas { max-width: 100%; max-height: calc(100% - 60px); background: var(--paper); border-radius: 3px; }
+.viewer .vbar { display: flex; gap: 10px; align-items: center; color: #fff; font-family: var(--mono); font-size: 0.85rem; white-space: nowrap; }
+.viewer button { color: #fff; border-color: #fff; padding: 8px 14px; }
 </style>
 </head>
 <body>

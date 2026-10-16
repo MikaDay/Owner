@@ -1,6 +1,7 @@
 """Reorganizează un PDF: prima pagină de N ori + ultimele M pagini."""
 
 import io
+import re
 from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
@@ -56,3 +57,38 @@ def merge(pdfs):
     out = io.BytesIO()
     writer.write(out)
     return out.getvalue()
+
+
+# Numărul comenzii de pe prima pagină, ex. „Nr. comandă: TR-2026/1458”,
+# „Comanda transport nr 884213”. Ținut în sincron cu findOrderNumber() din web/index.html.
+_ID = r"([A-Z0-9][A-Z0-9\-/.]*\d[A-Z0-9\-/]*)"
+_ORDER_PATTERNS = [re.compile(p, re.I) for p in (
+    r"(?:nr|num[aă]r|no|number)\.?\s*(?:de\s+)?(?:comand[aă]|order|transport|cmr)\s*[:#.]?\s*" + _ID,
+    r"(?:comand[aă]|order|transport|cmr)(?:\s+de\s+transport)?\s*(?:nr|no|number)?\.?\s*[:#]?\s*" + _ID,
+    r"\b(?:nr|no)\.?\s*[:#]?\s*" + _ID,
+)]
+
+
+def find_order_number(text):
+    flat = re.sub(r"\s+", " ", text or "")
+    for pattern in _ORDER_PATTERNS:
+        m = pattern.search(flat)
+        if m:
+            return m.group(1).rstrip(".-/")
+    return ""
+
+
+def order_number(data):
+    """Numărul comenzii din PDF (bytes) sau "" dacă nu e găsit (ex. PDF scanat)."""
+    try:
+        return find_order_number(PdfReader(io.BytesIO(data)).pages[0].extract_text())
+    except Exception:
+        return ""
+
+
+def page_count(data):
+    return len(PdfReader(io.BytesIO(data)).pages)
+
+
+def safe_filename(name):
+    return re.sub(r'[\\/:*?"<>|\r\n]+', "-", name).strip(" .") or "document"

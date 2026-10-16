@@ -47,6 +47,10 @@ PDF-uri și îți dă înapoi PDF-urile procesate: **un singur PDF** cu toate
 (gata de printat) sau un **ZIP** cu câte un PDF pentru fiecare mail.
 Mailurile deja descărcate sunt marcate, iar cele noi sunt bifate automat.
 
+Înainte de descărcare vezi o pagină de verificare: miniaturile fiecărui document
+(apasă pe una ca s-o vezi mare), numele fișierului luat din numărul comenzii
+(îl poți modifica) și o avertizare dacă un PDF nu are 6 pagini.
+
 ### 1. Parola de aplicație Yahoo
 
 login.yahoo.com → **Securitatea contului** → **Generează parolă de aplicație**
@@ -75,7 +79,7 @@ la repornire (pentru a-l păstra, adaugă un disc și setează `DATA_DIR`).
 Merge și pe orice alt server: `docker build -t transport . && docker run -p 8000:8000 --env-file .env transport`.
 
 Alte setări: `MAIL_SERVER` (implicit `imap.mail.yahoo.com`; Gmail = `imap.gmail.com`),
-`MAIL_FOLDER` (implicit `INBOX`), `FIRST_PAGE_COPIES` (2), `LAST_PAGES` (3).
+`MAIL_FOLDER` (implicit `INBOX`), `FIRST_PAGE_COPIES` (2), `LAST_PAGES` (3), `EXPECTED_PAGES` (6).
 
 ## Pe iPhone / iPad, fără server
 

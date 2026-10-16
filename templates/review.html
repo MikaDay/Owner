@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="top">
+  <div><div class="label">Verificare</div><h1>{{ items|length }} documente pregătite</h1></div>
+  <a href="javascript:history.back()">Înapoi la mailuri</a>
+</div>
+<p class="muted">Verifică miniaturile și numele fișierelor. Apasă pe o pagină ca s-o vezi mare.</p>
+
+{% for p in problems %}<p class="warn" style="margin:0">{{ p }}</p>{% endfor %}
+
+<form method="post" action="{{ url_for('export', token=token) }}" id="exp">
+  <div class="list">
+  {% for it in items %}
+    <div class="doc">
+      <div class="head">
+        <input type="checkbox" name="use_{{ loop.index0 }}" value="1" checked aria-label="Include {{ it.name }}">
+        <input type="text" name="name_{{ loop.index0 }}" value="{{ it.name }}" autocapitalize="off" spellcheck="false" aria-label="Nume fișier">
+      </div>
+      <div class="src">{{ it.source }} · {{ it.total }} pag. → {{ it.pages|join(", ") }}{% if not it.order_no %} · nr. comandă negăsit{% endif %}</div>
+      {% if it.total != expected %}
+      <div class="warn">Atenție: are {{ it.total }} pagini, nu {{ expected }}. Verifică miniaturile înainte să printezi.</div>
+      {% endif %}
+      <div class="thumbs" data-src="{{ url_for('job_file', token=token, i=loop.index0) }}" data-pages="{{ it.pages|join(',') }}"></div>
+    </div>
+  {% endfor %}
+  </div>
+  <div class="bar"><div class="in">
+    <span class="count" id="count"></span>
+    <button class="primary" name="mode" value="merged">Un singur PDF</button>
+    <button name="mode" value="zip">ZIP (separate)</button>
+  </div></div>
+</form>
+
+<div class="viewer" id="viewer" hidden role="dialog" aria-label="Previzualizare pagină">
+  <canvas id="big"></canvas>
+  <div class="vbar">
+    <button type="button" id="prev" aria-label="Pagina anterioară">‹</button>
+    <span id="vlabel"></span>
+    <button type="button" id="next" aria-label="Pagina următoare">›</button>
+    <button type="button" id="close">Închide</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+(() => {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const $ = (id) => document.getElementById(id);
+
+  async function renderPage(pdf, n, canvas, cssWidth) {
+    const page = await pdf.getPage(n);
+    const scale = cssWidth * (window.devicePixelRatio || 1) / page.getViewport({ scale: 1 }).width;
+    const vp = page.getViewport({ scale });
+    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+  }
+
+  let vPdf = null, vPos = 1, vPages = [];
+  async function show() {
+    $("vlabel").textContent = `${vPos} / ${vPdf.numPages} · p. ${vPages[vPos - 1]}`;
+    $("prev").disabled = vPos === 1; $("next").disabled = vPos === vPdf.numPages;
+    await renderPage(vPdf, vPos, $("big"), Math.min(window.innerWidth - 32, 900));
+  }
+  $("prev").onclick = () => { vPos--; show(); };
+  $("next").onclick = () => { vPos++; show(); };
+  $("close").onclick = () => { $("viewer").hidden = true; };
+  $("viewer").onclick = (e) => { if (e.target.id === "viewer") $("viewer").hidden = true; };
+  document.addEventListener("keydown", (e) => {
+    if ($("viewer").hidden) return;
+    if (e.key === "Escape") $("viewer").hidden = true;
+    if (e.key === "ArrowLeft" && vPos > 1) $("prev").click();
+    if (e.key === "ArrowRight" && vPdf && vPos < vPdf.numPages) $("next").click();
+  });
+
+  // Thumbnails show the processed PDF itself, so what you see is exactly what gets printed.
+  document.querySelectorAll(".thumbs").forEach(async (box) => {
+    const pages = box.dataset.pages.split(",");
+    const slots = pages.map((p, i) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "thumb" + (p === "1" ? " tr" : "");
+      b.setAttribute("aria-label", `Pagina ${i + 1} (originalul ${p})`);
+      const ph = document.createElement("div"); ph.className = "ph";
+      const cap = document.createElement("span"); cap.textContent = p;
+      b.append(ph, cap); box.append(b);
+      return { b, ph };
+    });
+    try {
+      const pdf = await pdfjsLib.getDocument({ url: box.dataset.src, isEvalSupported: false }).promise;
+      for (let i = 0; i < slots.length; i++) {
+        const c = document.createElement("canvas");
+        await renderPage(pdf, i + 1, c, 62);
+        slots[i].ph.replaceWith(c);
+        slots[i].b.onclick = () => { vPdf = pdf; vPages = pages; vPos = i + 1; $("viewer").hidden = false; show(); };
+      }
+    } catch (e) { box.insertAdjacentHTML("beforeend", '<span class="muted">Previzualizarea nu e disponibilă.</span>'); }
+  });
+
+  const form = $("exp"), count = $("count"), btns = form.querySelectorAll(".bar button");
+  const boxes = [...form.querySelectorAll('input[type=checkbox]')];
+  const update = () => {
+    const n = boxes.filter((b) => b.checked).length;
+    count.textContent = n ? `${n} documente selectate` : "Bifează documentele de descărcat";
+    btns.forEach((b) => b.disabled = !n);
+  };
+  form.addEventListener("change", update);
+  update();
+})();
+</script>
+{% endblock %}

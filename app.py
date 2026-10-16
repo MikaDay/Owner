@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 from fetch_mail import fetch_pdfs
-from process_pdf import process_pdf
+from process_pdf import order_number, page_count, process_bytes, safe_filename
 
 
 def load_config(path):
@@ -24,18 +24,36 @@ def load_config(path):
     return cfg
 
 
-def process_all(files, output_dir, copies, last):
-    ok = 0
+def process_all(files, output_dir, copies, last, expected):
+    ok, warnings = 0, []
     for src in files:
-        dst = Path(output_dir) / f"{Path(src).stem}_procesat.pdf"
         try:
-            pages = process_pdf(src, dst, copies, last)
+            data = Path(src).read_bytes()
+            out, pages = process_bytes(data, copies, last, Path(src).name)
         except Exception as e:  # un PDF stricat nu trebuie să oprească restul
             print(f"  EROARE {Path(src).name}: {e}")
             continue
+        number = order_number(data)
+        name = safe_filename(f"Comanda {number}" if number else f"{Path(src).stem}_procesat")
+        dst = _unique(Path(output_dir) / f"{name}.pdf")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(out)
         ok += 1
         print(f"  {Path(src).name} -> {dst.name}  (pagini: {', '.join(map(str, pages))})")
+        total = page_count(data)
+        if total != expected:
+            warnings.append(f"{Path(src).name} are {total} pagini, nu {expected}")
+    for w in warnings:
+        print(f"  ATENȚIE: {w} — verifică-l înainte să printezi.")
     return ok
+
+
+def _unique(path):
+    i = 2
+    while path.exists():
+        path = path.with_name(f"{path.stem.rsplit(' (', 1)[0]} ({i}){path.suffix}")
+        i += 1
+    return path
 
 
 def main():
@@ -58,6 +76,7 @@ def main():
     out = cfg.get("output", "output_dir", fallback="procesate")
     copies = cfg.getint("output", "first_page_copies", fallback=2)
     last = cfg.getint("output", "last_pages", fallback=3)
+    expected = cfg.getint("output", "expected_pages", fallback=6)
 
     if args.files:
         files = args.files
@@ -85,7 +104,7 @@ def main():
         print("Niciun PDF nou de procesat.")
         return
     print(f"Procesez {len(files)} PDF(-uri)...")
-    ok = process_all(files, out, copies, last)
+    ok = process_all(files, out, copies, last, expected)
     print(f"Gata: {ok}/{len(files)} salvate în '{out}'.")
 
 

@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one narrow column, built like a dispatch slip — pick, see the page order, save. */
+/* Layout: one narrow column, built like a dispatch slip — pick, check each document, save. */
 :root {
   --bg: #f3f4f1;
   --surface: #ffffff;
@@ -15,7 +15,11 @@
   --accent-ink: #1d2421;
   --tc: #3f6e86;          /* terms & conditions pages */
   --ok: #2f7d4f;
+  --warn: #9a5b00;
+  --warn-bg: #fdf1d6;
   --err: #b3362b;
+  --paper: #ffffff;
+  --shade: rgba(20, 25, 23, 0.82);
   --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
   --body: "Archivo", -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -24,12 +28,14 @@
   :root:not([data-theme="light"]) {
     --bg: #141917; --surface: #1d2321; --fg: #e8ece9; --muted: #9aa5a0; --line: #333b38;
     --accent: #f0b52a; --accent-ink: #141917; --tc: #7fb0c8; --ok: #5fbf85; --err: #ec6f63;
+    --warn: #f0c060; --warn-bg: #3a2f17; --paper: #f4f4f2; --shade: rgba(0, 0, 0, 0.85);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #141917; --surface: #1d2321; --fg: #e8ece9; --muted: #9aa5a0; --line: #333b38;
   --accent: #f0b52a; --accent-ink: #141917; --tc: #7fb0c8; --ok: #5fbf85; --err: #ec6f63;
+  --warn: #f0c060; --warn-bg: #3a2f17; --paper: #f4f4f2; --shade: rgba(0, 0, 0, 0.85);
   color-scheme: dark;
 }
 body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.45; }
@@ -72,19 +78,29 @@ h1 { font-family: var(--display); font-weight: 800; font-size: 1.75rem; line-hei
 
 .settings { display: flex; gap: 12px; flex-wrap: wrap; }
 .settings label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 140px; font-size: 0.85rem; color: var(--muted); }
-.settings input[type=number] {
-  font: inherit; font-size: 1rem; color: var(--fg); background: var(--surface);
+input[type=number], input[type=text] {
+  font: inherit; font-size: 16px; color: var(--fg); background: var(--surface);
   border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box;
 }
 .check { flex-direction: row !important; align-items: center; gap: 8px !important; flex-basis: 100% !important; color: var(--fg) !important; font-size: 0.95rem !important; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
 
 .list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
-.item { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
-.item .name { font-weight: 700; overflow-wrap: anywhere; min-width: 0; }
-.item .meta { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); grid-column: 1; }
+.item { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.item .head { display: flex; gap: 10px; align-items: end; }
+.item .head label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 0.78rem; color: var(--muted); }
+.item .head input { font-weight: 700; }
+.item .src { font-family: var(--mono); font-size: 0.74rem; color: var(--muted); overflow-wrap: anywhere; }
+.item .meta { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
 .item .meta.err { color: var(--err); }
 .item .meta.ok { color: var(--ok); }
+.warn { background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 8px 10px; font-size: 0.88rem; }
+.thumbs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.thumb { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0; border: 0; background: none; cursor: zoom-in; color: var(--muted); font-family: var(--mono); font-size: 0.7rem; font-weight: 400; }
+.thumb canvas { width: 62px; height: auto; display: block; background: var(--paper); border-radius: 2px; border: 2px solid var(--line); }
+.thumb.tr canvas { border-color: var(--accent); }
+.thumb.tc canvas { border-color: var(--tc); }
+.thumb .ph { width: 62px; height: 88px; background: var(--surface); border: 2px dashed var(--line); border-radius: 2px; }
 
 button {
   font: inherit; font-weight: 700; cursor: pointer; border-radius: 8px; padding: 10px 16px;
@@ -92,15 +108,23 @@ button {
 }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); padding: 14px 18px; font-size: 1.05rem; }
 button:disabled { opacity: 0.45; cursor: default; }
-button:focus-visible { outline: 3px solid var(--tc); outline-offset: 2px; }
-.item button { grid-row: 1 / span 2; grid-column: 2; padding: 8px 14px; }
+button:focus-visible, .thumb:focus-visible { outline: 3px solid var(--tc); outline-offset: 2px; }
+.item .head button { padding: 8px 14px; }
 .actions { display: flex; flex-direction: column; gap: 10px; }
 .status { min-height: 1.4em; font-size: 0.9rem; color: var(--muted); margin: 0; }
 .status.err { color: var(--err); }
 
+.viewer { position: fixed; inset: 0; z-index: 20; background: var(--shade); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.viewer[hidden] { display: none; }
+.viewer canvas { max-width: 100%; max-height: calc(100% - 60px); width: auto; height: auto; background: var(--paper); border-radius: 3px; }
+.viewer .bar { white-space: nowrap; display: flex; gap: 10px; align-items: center; color: #fff; font-family: var(--mono); font-size: 0.85rem; }
+.viewer button { color: #fff; border-color: #fff; padding: 8px 14px; }
+
 details { border-top: 1px solid var(--line); padding-top: 14px; color: var(--muted); font-size: 0.92rem; }
 details summary { cursor: pointer; color: var(--fg); font-weight: 700; }
 details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction: column; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) { .thumb canvas { transition: transform .15s; } .thumb:hover canvas { transform: translateY(-2px); } }
 </style>
 
 <div class="wrap">
@@ -129,6 +153,7 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
   <div class="settings">
     <label>Copii prima pagină <input type="number" id="copies" min="1" max="10" value="2"></label>
     <label>Pagini de la final <input type="number" id="last" min="0" max="20" value="3"></label>
+    <label>Pagini așteptate <input type="number" id="expected" min="1" max="50" value="6"></label>
     <label class="check"><input type="checkbox" id="merge"> Pune toate documentele într-un singur PDF</label>
   </div>
 
@@ -142,22 +167,36 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
   <details>
     <summary>Cum iau PDF-ul din Mail pe iPhone</summary>
     <ol>
-      <li>În Mail, ține apăsat pe atașamentul PDF și alege <b>Salvează în Fișiere</b>.</li>
+      <li>În Mail sau Yahoo Mail, ține apăsat pe atașamentul PDF și alege <b>Salvează în Fișiere</b>.</li>
       <li>Aici apasă <b>Alege PDF-uri</b> și selectează-l (poți selecta mai multe deodată).</li>
-      <li>Apasă <b>Salvează</b>. Pe iPhone se deschide meniul de partajare: îl poți salva în Fișiere, printa sau trimite mai departe.</li>
+      <li>Verifică miniaturile și numele, apoi apasă <b>Salvează</b>. Pe iPhone se deschide meniul de partajare: îl poți salva în Fișiere, printa sau trimite mai departe.</li>
     </ol>
   </details>
 </div>
 
+<div class="viewer" id="viewer" hidden role="dialog" aria-label="Previzualizare pagină">
+  <canvas id="big"></canvas>
+  <div class="bar">
+    <button id="prev" aria-label="Pagina anterioară">‹</button>
+    <span id="vlabel"></span>
+    <button id="next" aria-label="Pagina următoare">›</button>
+    <button id="close">Închide</button>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- Loading the worker as a plain script lets pdf.js run on the main thread (no cross-origin Worker needed). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const files = [];          // {file, name, total, out: Uint8Array|null, error}
-  let downloads = null;
+  const files = [];   // {id, file, name, outName, total, order, out, error, pdfjs, orderNo}
+  let downloads = null, nextId = 1;
 
   const getCopies = () => Math.max(1, Math.min(10, parseInt($("copies").value, 10) || 1));
   const getLast = () => Math.max(0, Math.min(20, parseInt($("last").value, 10) || 0));
+  const getExpected = () => Math.max(1, parseInt($("expected").value, 10) || 6);
 
   // Same rule as the desktop app: page 1 × copies, then the last N pages (never page 1 again).
   function pageOrder(total, copies, last) {
@@ -167,9 +206,26 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
     return order;
   }
 
+  // Order number from page-1 text, e.g. "Nr. comandă: TR-2026/1458", "Comanda transport nr 884213".
+  // Kept in sync with find_order_number() in process_pdf.py.
+  const ID = "([A-Z0-9][A-Z0-9\\-/.]*\\d[A-Z0-9\\-/]*)";
+  const ORDER_PATTERNS = [
+    new RegExp("(?:nr|num[aă]r|no|number)\\.?\\s*(?:de\\s+)?(?:comand[aă]|order|transport|cmr)\\s*[:#.]?\\s*" + ID, "i"),
+    new RegExp("(?:comand[aă]|order|transport|cmr)(?:\\s+de\\s+transport)?\\s*(?:nr|no|number)?\\.?\\s*[:#]?\\s*" + ID, "i"),
+    new RegExp("\\b(?:nr|no)\\.?\\s*[:#]?\\s*" + ID, "i"),
+  ];
+  function findOrderNumber(text) {
+    const flat = text.replace(/\s+/g, " ");
+    for (const re of ORDER_PATTERNS) {
+      const m = flat.match(re);
+      if (m) return m[1].replace(/[.\-/]+$/, "");
+    }
+    return "";
+  }
+  const safeFile = (s) => s.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+
   function drawOrder(total) {
-    const copies = getCopies(), last = getLast();
-    const order = pageOrder(total, copies, last);
+    const order = pageOrder(total, getCopies(), getLast());
     const kept = new Set(order);
     const tile = (i, isOrig) => {
       const el = document.createElement("div");
@@ -181,16 +237,99 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
     $("result").replaceChildren(...order.map((i) => tile(i, false)));
   }
 
+  async function analyse(entry) {
+    const bytes = new Uint8Array(await entry.file.arrayBuffer());
+    entry.bytes = bytes;
+    if (window.pdfjsLib) {
+      try {
+        entry.pdfjs = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+        const page = await entry.pdfjs.getPage(1);
+        const text = (await page.getTextContent()).items.map((it) => it.str).join(" ");
+        entry.orderNo = findOrderNumber(text);
+      } catch (e) { entry.pdfjs = null; }
+    }
+    const base = entry.name.replace(/\.pdf$/i, "");
+    entry.outName = safeFile(entry.orderNo ? `Comanda ${entry.orderNo}` : `${base}_procesat`) + ".pdf";
+  }
+
   async function build(entry) {
     const { PDFDocument } = PDFLib;
-    const src = await PDFDocument.load(await entry.file.arrayBuffer(), { ignoreEncryption: true });
+    const src = await PDFDocument.load(entry.bytes, { ignoreEncryption: true });
     entry.total = src.getPageCount();
     if (!entry.total) throw new Error("PDF-ul nu are pagini");
+    entry.order = pageOrder(entry.total, getCopies(), getLast());
     const out = await PDFDocument.create();
-    const pages = await out.copyPages(src, pageOrder(entry.total, getCopies(), getLast()));
-    pages.forEach((p) => out.addPage(p));
+    (await out.copyPages(src, entry.order)).forEach((p) => out.addPage(p));
     entry.out = await out.save();
   }
+
+  async function renderPage(pdf, index, canvas, cssWidth) {
+    const page = await pdf.getPage(index + 1);
+    const base = page.getViewport({ scale: 1 });
+    const scale = (cssWidth * (window.devicePixelRatio || 1)) / base.width;
+    const vp = page.getViewport({ scale });
+    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+  }
+
+  // Thumbnails are drawn once per source page and copied for repeats (page 1 appears twice).
+  async function thumbsFor(entry) {
+    const box = document.createElement("div");
+    box.className = "thumbs";
+    const cache = entry.thumbCache || (entry.thumbCache = new Map());
+    entry.order.forEach((src, pos) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "thumb " + (src === 0 ? "tr" : "tc");
+      b.setAttribute("aria-label", `Pagina ${pos + 1} din rezultat (originalul ${src + 1})`);
+      const ph = document.createElement("div"); ph.className = "ph";
+      const cap = document.createElement("span"); cap.textContent = `${src + 1}`;
+      b.append(ph, cap);
+      b.onclick = () => openViewer(entry, pos);
+      box.append(b);
+      if (!entry.pdfjs) return;
+      const ready = cache.get(src) || (async () => {
+        const c = document.createElement("canvas");
+        await renderPage(entry.pdfjs, src, c, 62);
+        return c;
+      })();
+      cache.set(src, ready);
+      ready.then((c) => {
+        const copy = document.createElement("canvas");
+        copy.width = c.width; copy.height = c.height;
+        copy.getContext("2d").drawImage(c, 0, 0);
+        ph.replaceWith(copy);
+      }).catch(() => {});
+    });
+    return box;
+  }
+
+  let vEntry = null, vPos = 0;
+  async function openViewer(entry, pos) {
+    if (!entry.pdfjs) return;
+    vEntry = entry; vPos = pos;
+    $("viewer").hidden = false;
+    await showViewerPage();
+    $("close").focus();
+  }
+  async function showViewerPage() {
+    const src = vEntry.order[vPos];
+    $("vlabel").textContent = `${vPos + 1} / ${vEntry.order.length} · p. ${src + 1}`;
+    $("prev").disabled = vPos === 0;
+    $("next").disabled = vPos === vEntry.order.length - 1;
+    const w = Math.min(window.innerWidth - 32, 900);
+    await renderPage(vEntry.pdfjs, src, $("big"), w);
+  }
+  $("prev").onclick = () => { if (vPos > 0) { vPos--; showViewerPage(); } };
+  $("next").onclick = () => { if (vPos < vEntry.order.length - 1) { vPos++; showViewerPage(); } };
+  $("close").onclick = () => { $("viewer").hidden = true; };
+  $("viewer").addEventListener("click", (e) => { if (e.target.id === "viewer") $("viewer").hidden = true; });
+  document.addEventListener("keydown", (e) => {
+    if ($("viewer").hidden) return;
+    if (e.key === "Escape") $("viewer").hidden = true;
+    if (e.key === "ArrowLeft") $("prev").click();
+    if (e.key === "ArrowRight") $("next").click();
+  });
 
   async function buildMerged() {
     const { PDFDocument } = PDFLib;
@@ -201,8 +340,6 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
     }
     return out.save();
   }
-
-  const outName = (name) => name.replace(/\.pdf$/i, "") + "_procesat.pdf";
 
   async function save(filename, bytes) {
     if (downloads) {
@@ -227,61 +364,83 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
     $("status").className = "status" + (isErr ? " err" : "");
   }
 
-  function render() {
+  async function renderItem(e) {
+    const row = document.createElement("div");
+    row.className = "item";
+    if (e.error || !e.out) {
+      const name = document.createElement("div");
+      name.style.fontWeight = "700"; name.textContent = e.name;
+      const meta = document.createElement("div");
+      meta.className = "meta" + (e.error ? " err" : "");
+      meta.textContent = e.error || "se procesează…";
+      row.append(name, meta);
+      return row;
+    }
+    const head = document.createElement("div");
+    head.className = "head";
+    const lab = document.createElement("label");
+    lab.textContent = e.orderNo ? "Nume fișier (după nr. comenzii)" : "Nume fișier";
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.id = "name-" + e.id; inp.value = e.outName.replace(/\.pdf$/i, "");
+    inp.autocapitalize = "off"; inp.spellcheck = false;
+    inp.oninput = () => { e.outName = safeFile(inp.value || "document") + ".pdf"; };
+    lab.append(inp);
+    head.append(lab);
+    if (!$("merge").checked) {
+      const b = document.createElement("button");
+      b.textContent = "Salvează";
+      b.onclick = async () => {
+        try { if (await save(e.outName, e.out)) setStatus(`Salvat: ${e.outName}`); }
+        catch (err) { setStatus("Nu s-a putut salva: " + (err.message || err), true); }
+      };
+      head.append(b);
+    }
+    const src = document.createElement("div");
+    src.className = "src";
+    src.textContent = `${e.name} · ${e.total} pag. → ${e.order.map((i) => i + 1).join(", ")}`;
+    row.append(head, src);
+    if (e.total !== getExpected()) {
+      const w = document.createElement("div");
+      w.className = "warn";
+      w.textContent = `Atenție: are ${e.total} pagini, nu ${getExpected()}. Verifică miniaturile înainte să printezi.`;
+      row.append(w);
+    }
+    row.append(await thumbsFor(e));
+    return row;
+  }
+
+  let renderSeq = 0;
+  async function render() {
+    const seq = ++renderSeq;
     const list = $("list");
     list.hidden = files.length === 0;
-    list.replaceChildren(...files.map((e) => {
-      const row = document.createElement("div");
-      row.className = "item";
-      const name = document.createElement("div");
-      name.className = "name"; name.textContent = e.name;
-      const meta = document.createElement("div");
-      if (e.error) { meta.className = "meta err"; meta.textContent = e.error; }
-      else if (!e.out) { meta.className = "meta"; meta.textContent = "se procesează…"; }
-      else {
-        meta.className = "meta ok";
-        meta.textContent = `${e.total} pag. → ` + pageOrder(e.total, getCopies(), getLast()).map((i) => i + 1).join(", ");
-      }
-      row.append(name, meta);
-      if (e.out && !$("merge").checked) {
-        const b = document.createElement("button");
-        b.textContent = "Salvează";
-        b.onclick = async () => {
-          try { if (await save(outName(e.name), e.out)) setStatus(`Salvat: ${outName(e.name)}`); }
-          catch (err) { setStatus("Nu s-a putut salva: " + (err.message || err), true); }
-        };
-        row.append(b);
-      }
-      return row;
-    }));
+    const rows = await Promise.all(files.map(renderItem));
+    if (seq !== renderSeq) return;
+    list.replaceChildren(...rows);
     const ready = files.filter((f) => f.out).length;
     $("saveAll").disabled = ready === 0;
     $("saveAll").textContent = $("merge").checked
       ? (ready ? `Salvează un singur PDF (${ready} documente)` : "Salvează PDF-ul")
       : (ready > 1 ? `Salvează toate (${ready})` : "Salvează PDF-ul");
     const first = files.find((f) => f.total);
-    drawOrder(first ? first.total : 6);
+    drawOrder(first ? first.total : getExpected());
   }
 
   async function addFiles(list) {
     const pdfs = [...list].filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
     if (!pdfs.length) { setStatus("Alege fișiere PDF.", true); return; }
     setStatus("");
-    const entries = pdfs.map((file) => ({ file, name: file.name, total: 0, out: null, error: "" }));
+    const entries = pdfs.map((file) => ({ id: nextId++, file, name: file.name, total: 0, order: [], out: null, error: "", orderNo: "" }));
     files.push(...entries);
     render();
     for (const e of entries) {
-      try { await build(e); } catch (err) { e.error = "Nu pot citi PDF-ul: " + (err.message || err); }
+      try { await analyse(e); await build(e); }
+      catch (err) { e.error = "Nu pot citi PDF-ul: " + (err.message || err); }
       render();
     }
   }
 
   async function rebuildAll() {
-    for (const e of files) {
-      if (e.error) continue;
-      e.out = null;
-    }
-    render();
     for (const e of files) {
       if (e.error) continue;
       try { await build(e); } catch (err) { e.error = "Nu pot citi PDF-ul: " + (err.message || err); }
@@ -296,6 +455,7 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
   drop.addEventListener("drop", (ev) => { ev.preventDefault(); drop.classList.remove("drag"); addFiles(ev.dataTransfer.files); });
   $("copies").addEventListener("change", rebuildAll);
   $("last").addEventListener("change", rebuildAll);
+  $("expected").addEventListener("change", render);
   $("merge").addEventListener("change", render);
 
   $("saveAll").addEventListener("click", async () => {
@@ -308,7 +468,7 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
       } else {
         let n = 0;
         for (const e of ready) {          // one confirmation at a time
-          if (await save(outName(e.name), e.out)) n++;
+          if (await save(e.outName, e.out)) n++;
         }
         setStatus(`Salvate: ${n} din ${ready.length}`);
       }
