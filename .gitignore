@@ -1,0 +1,7 @@
+config.ini
+descarcate/
+procesate/
+.processed.json
+__pycache__/
+*.pyc
+.venv/
