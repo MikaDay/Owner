@@ -39,3 +39,16 @@ python app.py --local un_folder          # toate PDF-urile dintr-un folder
 
 Numărul de copii ale primei pagini și numărul de pagini de la final se pot schimba
 în `config.ini` (`first_page_copies`, `last_pages`).
+
+## Pe iPhone / iPad
+
+Python nu rulează pe iOS, așa că există și o versiune web în `web/index.html`
+(folosește [pdf-lib](https://pdf-lib.js.org), totul se face local, în browser):
+
+1. În Mail, ține apăsat pe atașamentul PDF → **Salvează în Fișiere**.
+2. Deschide pagina, apasă **Alege PDF-uri** și selectează unul sau mai multe fișiere.
+3. Apasă **Salvează** (poți bifa să pună toate documentele într-un singur PDF, util la printat).
+
+Pagina poate fi deschisă ca artifact în aplicația Claude sau găzduită oriunde
+(de ex. GitHub Pages) și adăugată pe ecranul principal din Safari
+(Partajează → Adaugă pe ecranul principal).

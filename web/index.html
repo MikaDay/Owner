@@ -1,0 +1,324 @@
+<title>Pagini transport</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow column, built like a dispatch slip — pick, see the page order, save. */
+:root {
+  --bg: #f3f4f1;
+  --surface: #ffffff;
+  --fg: #1d2421;
+  --muted: #5f6a65;
+  --line: #d7dbd6;
+  --accent: #e0a100;      /* shipping-label amber */
+  --accent-ink: #1d2421;
+  --tc: #3f6e86;          /* terms & conditions pages */
+  --ok: #2f7d4f;
+  --err: #b3362b;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Archivo", -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141917; --surface: #1d2321; --fg: #e8ece9; --muted: #9aa5a0; --line: #333b38;
+    --accent: #f0b52a; --accent-ink: #141917; --tc: #7fb0c8; --ok: #5fbf85; --err: #ec6f63;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141917; --surface: #1d2321; --fg: #e8ece9; --muted: #9aa5a0; --line: #333b38;
+  --accent: #f0b52a; --accent-ink: #141917; --tc: #7fb0c8; --ok: #5fbf85; --err: #ec6f63;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.45; }
+.wrap {
+  max-width: 560px; margin: 0 auto;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 22px;
+}
+h1 { font-family: var(--display); font-weight: 800; font-size: 1.75rem; line-height: 1.1; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.lead { margin: 6px 0 0; color: var(--muted); }
+.label { font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+
+.order { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; align-items: center; }
+.pages { display: flex; gap: 6px; flex-wrap: wrap; }
+.pg {
+  width: 30px; height: 40px; border-radius: 3px; border: 1.5px solid var(--line);
+  display: grid; place-items: center; font-family: var(--mono); font-size: 0.8rem; color: var(--muted);
+  background: var(--surface);
+}
+.pg.tr { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
+.pg.tc { border-color: var(--tc); color: var(--tc); }
+.pg.off { opacity: 0.35; text-decoration: line-through; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.85rem; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.legend .l-tr::before { background: var(--accent); }
+.legend .l-tc::before { border: 1.5px solid var(--tc); }
+
+.pick {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center;
+  border: 2px dashed var(--line); border-radius: 10px; padding: 26px 16px; cursor: pointer;
+  background: var(--surface);
+}
+.pick:hover, .pick.drag { border-color: var(--accent); }
+.pick strong { font-family: var(--display); font-size: 1.1rem; }
+.pick small { color: var(--muted); }
+#file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+#file:focus-visible + .pick { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.settings { display: flex; gap: 12px; flex-wrap: wrap; }
+.settings label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 140px; font-size: 0.85rem; color: var(--muted); }
+.settings input[type=number] {
+  font: inherit; font-size: 1rem; color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box;
+}
+.check { flex-direction: row !important; align-items: center; gap: 8px !important; flex-basis: 100% !important; color: var(--fg) !important; font-size: 0.95rem !important; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+.list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.item { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.item .name { font-weight: 700; overflow-wrap: anywhere; min-width: 0; }
+.item .meta { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); grid-column: 1; }
+.item .meta.err { color: var(--err); }
+.item .meta.ok { color: var(--ok); }
+
+button {
+  font: inherit; font-weight: 700; cursor: pointer; border-radius: 8px; padding: 10px 16px;
+  border: 1.5px solid var(--fg); background: transparent; color: var(--fg);
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); padding: 14px 18px; font-size: 1.05rem; }
+button:disabled { opacity: 0.45; cursor: default; }
+button:focus-visible { outline: 3px solid var(--tc); outline-offset: 2px; }
+.item button { grid-row: 1 / span 2; grid-column: 2; padding: 8px 14px; }
+.actions { display: flex; flex-direction: column; gap: 10px; }
+.status { min-height: 1.4em; font-size: 0.9rem; color: var(--muted); margin: 0; }
+.status.err { color: var(--err); }
+
+details { border-top: 1px solid var(--line); padding-top: 14px; color: var(--muted); font-size: 0.92rem; }
+details summary { cursor: pointer; color: var(--fg); font-weight: 700; }
+details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction: column; gap: 6px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="label">Comandă transport · PDF</div>
+    <h1>Pagini transport</h1>
+    <p class="lead">Alege PDF-urile primite pe mail. Păstrez prima pagină de două ori și ultimele 3 pagini cu termenii și condițiile.</p>
+  </header>
+
+  <section class="order" aria-label="Ordinea paginilor">
+    <span class="label">Original</span>
+    <div class="pages" id="orig"></div>
+    <span class="label">Rezultat</span>
+    <div class="pages" id="result"></div>
+  </section>
+  <div class="legend"><span class="l-tr">Detalii transport</span><span class="l-tc">Termeni și condiții</span></div>
+
+  <div>
+    <input type="file" id="file" accept="application/pdf,.pdf" multiple>
+    <label for="file" class="pick" id="drop">
+      <strong>Alege PDF-uri</strong>
+      <small>Din Fișiere, iCloud Drive sau descărcate din Mail</small>
+    </label>
+  </div>
+
+  <div class="settings">
+    <label>Copii prima pagină <input type="number" id="copies" min="1" max="10" value="2"></label>
+    <label>Pagini de la final <input type="number" id="last" min="0" max="20" value="3"></label>
+    <label class="check"><input type="checkbox" id="merge"> Pune toate documentele într-un singur PDF</label>
+  </div>
+
+  <div class="list" id="list" hidden></div>
+
+  <div class="actions">
+    <button class="primary" id="saveAll" disabled>Salvează PDF-urile</button>
+    <p class="status" id="status" role="status"></p>
+  </div>
+
+  <details>
+    <summary>Cum iau PDF-ul din Mail pe iPhone</summary>
+    <ol>
+      <li>În Mail, ține apăsat pe atașamentul PDF și alege <b>Salvează în Fișiere</b>.</li>
+      <li>Aici apasă <b>Alege PDF-uri</b> și selectează-l (poți selecta mai multe deodată).</li>
+      <li>Apasă <b>Salvează</b>. Pe iPhone se deschide meniul de partajare: îl poți salva în Fișiere, printa sau trimite mai departe.</li>
+    </ol>
+  </details>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const files = [];          // {file, name, total, out: Uint8Array|null, error}
+  let downloads = null;
+
+  const getCopies = () => Math.max(1, Math.min(10, parseInt($("copies").value, 10) || 1));
+  const getLast = () => Math.max(0, Math.min(20, parseInt($("last").value, 10) || 0));
+
+  // Same rule as the desktop app: page 1 × copies, then the last N pages (never page 1 again).
+  function pageOrder(total, copies, last) {
+    const start = Math.max(1, total - last);
+    const order = Array(copies).fill(0);
+    for (let i = start; i < total; i++) order.push(i);
+    return order;
+  }
+
+  function drawOrder(total) {
+    const copies = getCopies(), last = getLast();
+    const order = pageOrder(total, copies, last);
+    const kept = new Set(order);
+    const tile = (i, isOrig) => {
+      const el = document.createElement("div");
+      el.className = "pg " + (i === 0 ? "tr" : (kept.has(i) ? "tc" : "")) + (isOrig && !kept.has(i) ? " off" : "");
+      el.textContent = i + 1;
+      return el;
+    };
+    $("orig").replaceChildren(...Array.from({ length: total }, (_, i) => tile(i, true)));
+    $("result").replaceChildren(...order.map((i) => tile(i, false)));
+  }
+
+  async function build(entry) {
+    const { PDFDocument } = PDFLib;
+    const src = await PDFDocument.load(await entry.file.arrayBuffer(), { ignoreEncryption: true });
+    entry.total = src.getPageCount();
+    if (!entry.total) throw new Error("PDF-ul nu are pagini");
+    const out = await PDFDocument.create();
+    const pages = await out.copyPages(src, pageOrder(entry.total, getCopies(), getLast()));
+    pages.forEach((p) => out.addPage(p));
+    entry.out = await out.save();
+  }
+
+  async function buildMerged() {
+    const { PDFDocument } = PDFLib;
+    const out = await PDFDocument.create();
+    for (const e of files.filter((f) => f.out)) {
+      const doc = await PDFDocument.load(e.out);
+      (await out.copyPages(doc, doc.getPageIndices())).forEach((p) => out.addPage(p));
+    }
+    return out.save();
+  }
+
+  const outName = (name) => name.replace(/\.pdf$/i, "") + "_procesat.pdf";
+
+  async function save(filename, bytes) {
+    if (downloads) {
+      try {
+        await downloads.save({ filename, data: new Blob([bytes], { type: "application/pdf" }) });
+        return true;
+      } catch (e) {
+        if (e && e.code === "declined") return false;
+        if (e && e.code !== "unavailable" && e.code !== "not_granted") throw e;
+      }
+    }
+    // Outside the Claude viewer (e.g. opened directly in Safari): plain browser download.
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    return true;
+  }
+
+  function setStatus(text, isErr) {
+    $("status").textContent = text;
+    $("status").className = "status" + (isErr ? " err" : "");
+  }
+
+  function render() {
+    const list = $("list");
+    list.hidden = files.length === 0;
+    list.replaceChildren(...files.map((e) => {
+      const row = document.createElement("div");
+      row.className = "item";
+      const name = document.createElement("div");
+      name.className = "name"; name.textContent = e.name;
+      const meta = document.createElement("div");
+      if (e.error) { meta.className = "meta err"; meta.textContent = e.error; }
+      else if (!e.out) { meta.className = "meta"; meta.textContent = "se procesează…"; }
+      else {
+        meta.className = "meta ok";
+        meta.textContent = `${e.total} pag. → ` + pageOrder(e.total, getCopies(), getLast()).map((i) => i + 1).join(", ");
+      }
+      row.append(name, meta);
+      if (e.out && !$("merge").checked) {
+        const b = document.createElement("button");
+        b.textContent = "Salvează";
+        b.onclick = async () => {
+          try { if (await save(outName(e.name), e.out)) setStatus(`Salvat: ${outName(e.name)}`); }
+          catch (err) { setStatus("Nu s-a putut salva: " + (err.message || err), true); }
+        };
+        row.append(b);
+      }
+      return row;
+    }));
+    const ready = files.filter((f) => f.out).length;
+    $("saveAll").disabled = ready === 0;
+    $("saveAll").textContent = $("merge").checked
+      ? (ready ? `Salvează un singur PDF (${ready} documente)` : "Salvează PDF-ul")
+      : (ready > 1 ? `Salvează toate (${ready})` : "Salvează PDF-ul");
+    const first = files.find((f) => f.total);
+    drawOrder(first ? first.total : 6);
+  }
+
+  async function addFiles(list) {
+    const pdfs = [...list].filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (!pdfs.length) { setStatus("Alege fișiere PDF.", true); return; }
+    setStatus("");
+    const entries = pdfs.map((file) => ({ file, name: file.name, total: 0, out: null, error: "" }));
+    files.push(...entries);
+    render();
+    for (const e of entries) {
+      try { await build(e); } catch (err) { e.error = "Nu pot citi PDF-ul: " + (err.message || err); }
+      render();
+    }
+  }
+
+  async function rebuildAll() {
+    for (const e of files) {
+      if (e.error) continue;
+      e.out = null;
+    }
+    render();
+    for (const e of files) {
+      if (e.error) continue;
+      try { await build(e); } catch (err) { e.error = "Nu pot citi PDF-ul: " + (err.message || err); }
+    }
+    render();
+  }
+
+  $("file").addEventListener("change", (ev) => { addFiles(ev.target.files); ev.target.value = ""; });
+  const drop = $("drop");
+  drop.addEventListener("dragover", (ev) => { ev.preventDefault(); drop.classList.add("drag"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+  drop.addEventListener("drop", (ev) => { ev.preventDefault(); drop.classList.remove("drag"); addFiles(ev.dataTransfer.files); });
+  $("copies").addEventListener("change", rebuildAll);
+  $("last").addEventListener("change", rebuildAll);
+  $("merge").addEventListener("change", render);
+
+  $("saveAll").addEventListener("click", async () => {
+    const ready = files.filter((f) => f.out);
+    try {
+      if ($("merge").checked) {
+        const d = new Date();
+        const name = `transporturi_${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}.pdf`;
+        if (await save(name, await buildMerged())) setStatus(`Salvat: ${name}`);
+      } else {
+        let n = 0;
+        for (const e of ready) {          // one confirmation at a time
+          if (await save(outName(e.name), e.out)) n++;
+        }
+        setStatus(`Salvate: ${n} din ${ready.length}`);
+      }
+    } catch (err) {
+      setStatus("Nu s-a putut salva: " + (err.message || err), true);
+    }
+  });
+
+  if (!window.PDFLib) setStatus("Nu s-a putut încărca biblioteca PDF. Verifică internetul și reîncarcă pagina.", true);
+  render();
+  window.claude?.use?.("downloads").then((d) => { downloads = d; }).catch(() => {});
+})();
+</script>
