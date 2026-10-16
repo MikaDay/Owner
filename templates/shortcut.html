@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Scurtătură · Cirforvest{% endblock %}
+{% block body %}
+<div class="top">
+  <div><div class="label">iPhone / iPad</div><h1>Trimite din Mail cu o apăsare</h1></div>
+  <a href="{{ url_for('index') }}">Înapoi</a>
+</div>
+<p class="muted">Faci o singură dată o scurtătură în aplicația <b>Scurtături</b> (Shortcuts). După aceea, în Mail apeși pe PDF → Partajează → <b>Cirforvest</b>, iar PDF-ul se deschide direct aici, în pagina de verificare.</p>
+
+<ol class="steps">
+  <li>
+    <b>Creează scurtătura.</b> Deschide aplicația <b>Scurtături</b>, apasă <b>+</b> sus-dreapta și numește-o <b>Cirforvest</b> (apasă pe nume, sus).
+  </li>
+  <li>
+    <b>Arat-o în meniul de partajare.</b> Apasă pe ⓘ (jos sau în meniul de sus) și pornește <b>Afișează în foaia de partajare</b> (<i>Show in Share Sheet</i>). La tipurile de intrare lasă doar <b>PDF-uri</b> și <b>Fișiere</b>.
+    <br>Opțional, la <b>Dacă nu există intrare</b> alege <b>Solicită fișiere</b> — așa poți porni scurtătura și de pe ecranul principal, alegând PDF-uri din Fișiere.
+  </li>
+  <li>
+    <b>Adaugă acțiunea „Obține conținutul URL-ului”</b> (<i>Get Contents of URL</i>) — caut-o în bara de jos.
+    <ul>
+      <li>La URL pune:
+        <div class="copy"><code id="u">{{ api_url }}</code><button type="button" data-copy="u">Copiază</button></div>
+      </li>
+      <li>Apasă pe săgeata / <b>Afișează mai mult</b>: <b>Metodă</b> = <b>POST</b>, <b>Corpul cererii</b> = <b>Formular</b> (<i>Form</i>).</li>
+      <li>Adaugă un câmp <b>Text</b>: cheia <code>password</code>, valoarea = parola site-ului.</li>
+      <li>Adaugă un câmp <b>Fișier</b> (<i>File</i>): cheia <code>pdf</code>, valoarea = variabila <b>Intrare scurtătură</b> (<i>Shortcut Input</i>).</li>
+    </ul>
+  </li>
+  <li>
+    <b>Adaugă acțiunea „Deschide URL-urile”</b> (<i>Open URLs</i>). Se leagă singură de rezultatul pasului anterior (<b>Conținutul URL-ului</b>).
+  </li>
+  <li>
+    <b>Gata.</b> Apasă <b>Terminat</b>. În Mail: apasă pe atașamentul PDF → butonul de partajare → <b>Cirforvest</b>. Prima dată iOS te întreabă dacă scurtătura are voie să trimită date la <code>{{ request.host }}</code> — alege <b>Permite întotdeauna</b>.
+  </li>
+</ol>
+
+<details class="muted small">
+  <summary>Nu merge?</summary>
+  <ul>
+    <li><b>„Parolă greșită”</b> — verifică parola din câmpul <code>password</code> (litere mari/mici, caracterul #).</li>
+    <li><b>Nu apare Cirforvest la Partajează</b> — derulează lista de acțiuni până jos și apasă <b>Editează acțiunile</b>; sau verifică pasul 2.</li>
+    <li><b>Durează un minut</b> — serverul gratuit „doarme” după 15 minute fără folosire; prima trimitere îl trezește.</li>
+  </ul>
+</details>
+
+<script>
+document.querySelectorAll("[data-copy]").forEach((b) => b.onclick = async () => {
+  const el = document.getElementById(b.dataset.copy);
+  try { await navigator.clipboard.writeText(el.textContent.trim()); b.textContent = "Copiat"; }
+  catch (e) { const r = document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r); }
+  setTimeout(() => b.textContent = "Copiază", 2000);
+});
+</script>
+{% endblock %}

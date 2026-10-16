@@ -74,6 +74,10 @@ login.yahoo.com → **Securitatea contului** → **Generează parolă de aplica�
 4. După deploy primești o adresă de forma `https://pagini-transport.onrender.com`.
    Deschide-o în Safari → Partajează → **Adaugă pe ecranul principal**.
 
+**Trimitere din Mail pe iPhone:** pagina `/scurtatura` de pe site explică pas cu pas
+cum faci o scurtătură iOS („Cirforvest”) care trimite PDF-ul din meniul de partajare
+la `/api/upload` și deschide direct pagina de verificare.
+
 Pe planul gratuit site-ul „adoarme” după 15 minute fără folosire și pornește
 în ~1 minut la prima deschidere; tot acolo, marcajul „descărcat” se pierde
 la repornire (pentru a-l păstra, adaugă un disc și setează `DATA_DIR`).

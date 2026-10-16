@@ -23,10 +23,14 @@ from pathlib import Path
 from flask import (Flask, abort, redirect, render_template, request, send_file,
                    session, url_for)
 
+from werkzeug.middleware.proxy_fix import ProxyFix
+
 from mailbox_client import Mailbox
 from process_pdf import merge, order_number, page_count, process_bytes, safe_filename
 
 app = Flask(__name__)
+# Render pune serverul în spatele unui proxy HTTPS; așa linkurile generate încep cu https://.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # Fără SECRET_KEY, cheia e derivată din parole, ca toate procesele serverului să o folosească pe aceeași.
 app.secret_key = os.environ.get("SECRET_KEY") or hashlib.sha256(
     ("transport:" + os.environ.get("SITE_PASSWORD", "") + os.environ.get("MAIL_PASSWORD", "")).encode()).hexdigest()
@@ -160,7 +164,7 @@ def prepare():
     except Exception as e:
         shutil.rmtree(path, ignore_errors=True)
         return render_template("message.html", title="Nu m-am putut conecta la mail", text=_friendly_error(e))
-    return _finish_job(path, items, problems, "Mailurile alese nu au PDF-uri.")
+    return _job_response(_save_job(path, items, problems), problems, "Mailurile alese nu au PDF-uri.")
 
 
 @app.route("/upload", methods=["POST"])
@@ -170,14 +174,48 @@ def upload():
     uploads = [f for f in request.files.getlist("pdf") if f and f.filename]
     if not uploads:
         return redirect(url_for("index"))
+    token, problems = _job_from_uploads(uploads)
+    return _job_response(token, problems, "Fișierele alese nu sunt PDF-uri.")
+
+
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    """Primire din scurtătura „Trimite la Cirforvest” de pe iPhone.
+
+    Primește PDF-urile (orice nume de câmp) și parola site-ului în câmpul
+    `password`; răspunde cu linkul paginii de verificare, ca text simplu."""
+    given = request.form.get("password") or request.headers.get("X-Password", "")
+    if not SITE_PASSWORD or not hmac.compare_digest(given, SITE_PASSWORD):
+        return "Parolă greșită. Verifică parola din scurtătură.", 403, {"Content-Type": "text/plain; charset=utf-8"}
+    uploads = [f for key in request.files for f in request.files.getlist(key) if f]
+    if not uploads:
+        return "Nu am primit niciun PDF.", 400, {"Content-Type": "text/plain; charset=utf-8"}
+    token, problems = _job_from_uploads(uploads)
+    if not token:
+        return "Niciun PDF nu a putut fi procesat. " + " ".join(problems), 422, \
+            {"Content-Type": "text/plain; charset=utf-8"}
+    return url_for("review", token=token, _external=True), 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+
+@app.route("/scurtatura")
+@login_required
+def shortcut_help():
+    return render_template("shortcut.html", api_url=url_for("api_upload", _external=True))
+
+
+def _job_from_uploads(uploads):
     path, items, problems = _new_job()
-    for f in uploads:
-        name = safe_filename(Path(f.filename).name)
-        if not name.lower().endswith(".pdf"):
+    for i, f in enumerate(uploads, 1):
+        # Scurtăturile iOS trimit uneori fișierul fără nume sau fără extensie.
+        name = safe_filename(Path(f.filename or f"document {i}.pdf").name)
+        data = f.read()
+        if not data.startswith(b"%PDF"):
             problems.append(f"{name}: nu e PDF.")
             continue
-        _add_item(path, items, problems, name, f.read())
-    return _finish_job(path, items, problems, "Fișierele alese nu sunt PDF-uri.")
+        if not name.lower().endswith(".pdf"):
+            name += ".pdf"
+        _add_item(path, items, problems, name, data)
+    return _save_job(path, items, problems), problems
 
 
 def _new_job():
@@ -204,17 +242,24 @@ def _add_item(path, items, problems, name, data, message_id=""):
     })
 
 
-def _finish_job(path, items, problems, empty_text):
+def _save_job(path, items, problems):
+    """Salvează pregătirea și întoarce token-ul ei, sau None dacă nu s-a procesat nimic."""
     if not items:
         shutil.rmtree(path, ignore_errors=True)
-        return render_template("message.html", title="Niciun PDF procesat",
-                               text=" ".join(problems) or empty_text)
+        return None
     (path / "job.json").write_text(json.dumps({"items": items, "problems": problems}), encoding="utf-8")
-    return redirect(url_for("review", token=path.name))
+    return path.name
 
 
+def _job_response(token, problems, empty_text):
+    if not token:
+        return render_template("message.html", title="Niciun PDF procesat", text=" ".join(problems) or empty_text)
+    return redirect(url_for("review", token=token))
+
+
+# Paginile unei pregătiri sunt accesibile prin token-ul lor aleator (128 biți, expiră după o oră),
+# ca scurtătura de pe iPhone să le poată deschide în Safari fără o nouă logare.
 @app.route("/review/<token>")
-@login_required
 def review(token):
     _, job = _job(token)
     return render_template("review.html", token=token, items=job["items"], problems=job["problems"],
@@ -222,7 +267,6 @@ def review(token):
 
 
 @app.route("/file/<token>/<int:i>.pdf")
-@login_required
 def job_file(token, i):
     path, job = _job(token)
     if not 0 <= i < len(job["items"]):
@@ -231,7 +275,6 @@ def job_file(token, i):
 
 
 @app.route("/export/<token>", methods=["POST"])
-@login_required
 def export(token):
     path, job = _job(token)
     items = job["items"]
