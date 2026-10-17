@@ -46,6 +46,8 @@ def _number(value):
 
 
 _COMPANY = re.compile(r"\b(S\.?R\.?L|S\.?A|GmbH|LTD|Kft|s\.?r\.?o|Sp\.? z o\.?o|B\.?V|N\.?V|AG|SAS|SpA)\b\.?", re.I)
+# Mențiuni puse în blocul de adresă, ex. „taxa Toll_RO se va factura separat” — nu sunt nume de firme.
+_NOTE = re.compile(r"\btoll|\btaxa\b|se va factura", re.I)
 _COUNTY = re.compile(r"^(.+?),?\s+Jud(?:etul|e[tț]ul|\.)?\s*([A-Za-z]{1,2})\.?$", re.I)
 
 
@@ -75,9 +77,10 @@ def _stops(lines, kind):
             county = _COUNTY.match(city)
             if county:
                 city = f"{county.group(1).strip()} ({county.group(2).upper()})"
-            name = next((block[k] for k in range(city_at - 1, -1, -1) if _COMPANY.search(block[k])), "")
-        if not name and block:
-            name = block[0]
+            name = next((block[k] for k in range(city_at - 1, -1, -1)
+                         if _COMPANY.search(block[k]) and not _NOTE.search(block[k])), "")
+        if not name:
+            name = next((ln for ln in block if not _NOTE.search(ln)), "")
         stops.append((name, city, date))
     return stops
 
@@ -131,7 +134,8 @@ def parse_order(text):
         "ldm": _number(ldm),
         "price": _number(price.group(1)) if price else None,
         "currency": price.group(2) if price else "",
-        "truck": _find(r"Numar de inmatriculare camion:\s*(\S+)", flat),
+        "truck": re.sub(r"\s+", "", _find(r"Numar de inmatriculare camion:[ \t]*([^\n]+)", text or "")),
+        "toll_ro": "DA" if re.search(r"toll[_\s-]*ro|ro[_\s-]*toll", text or "", re.I) else "",
         "contact": _find(r"Nume:\s*(.+?)\s+Telefon:", flat),
     }
 
@@ -150,6 +154,7 @@ COLUMNS = [
     ("Preț", "price", 12, "#,##0.00"),
     ("Monedă", "currency", 8, None),
     ("Nr. camion", "truck", 12, None),
+    ("Toll_RO separat", "toll_ro", 15, None),
     ("Ref. client", "client_ref", 24, None),
     ("Ref. DSV", "dsv_ref", 17, None),
     ("Persoană contact", "contact", 18, None),

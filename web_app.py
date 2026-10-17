@@ -276,6 +276,7 @@ def _add_item(path, items, problems, name, data, message_id="", uid=""):
     details = parse_order(first_page_text(data))
     number = details["order_no"]
     (path / f"{len(items)}.pdf").write_bytes(out)
+    (path / f"{len(items)}.orig.pdf").write_bytes(data)
     items.append({
         "source": name,
         "details": {k: v.isoformat() if isinstance(v, date) else v for k, v in details.items()},
@@ -297,7 +298,8 @@ def _summary(d):
     when = d["loading_date"].strftime("%d.%m") if d["loading_date"] else ""
     price = (f"{d['price']:,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".") + f" {d['currency']}"
              if d["price"] is not None else "")
-    return " · ".join(x for x in (route, when, price) if x)
+    toll = "Toll_RO se facturează separat" if d.get("toll_ro") else ""
+    return " · ".join(x for x in (route, when, price, toll) if x)
 
 
 def _save_job(path, items, problems):
@@ -330,6 +332,15 @@ def job_file(token, i):
     if not 0 <= i < len(job["items"]):
         abort(404)
     return send_file(path / f"{i}.pdf", mimetype="application/pdf")
+
+
+@app.route("/original/<token>/<int:i>.pdf")
+def job_original(token, i):
+    path, job = _job(token)
+    if not 0 <= i < len(job["items"]) or not (path / f"{i}.orig.pdf").exists():
+        abort(404)
+    return send_file(path / f"{i}.orig.pdf", mimetype="application/pdf",
+                     download_name=job["items"][i]["source"])
 
 
 @app.route("/export/<token>", methods=["POST"])

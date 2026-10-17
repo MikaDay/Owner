@@ -17,7 +17,7 @@
         <input type="text" name="name_{{ loop.index0 }}" value="{{ it.name }}" autocapitalize="off" spellcheck="false" aria-label="Nume fișier">
       </div>
       {% if it.summary %}<div class="route">{{ it.summary }}</div>{% endif %}
-      <div class="src">{{ it.source }} · {{ it.total }} pag. → {{ it.pages|join(", ") }}{% if not it.order_no %} · nr. comandă negăsit{% endif %}</div>
+      <div class="src"><a href="{{ url_for('job_original', token=token, i=loop.index0) }}" target="_blank">{{ it.source }}</a> · {{ it.total }} pag. → {{ it.pages|join(", ") }}{% if not it.order_no %} · nr. comandă negăsit{% endif %}</div>
       {% if it.total != expected %}
       <div class="warn">Atenție: are {{ it.total }} pagini, nu {{ expected }}. Verifică miniaturile înainte să printezi.</div>
       {% endif %}
