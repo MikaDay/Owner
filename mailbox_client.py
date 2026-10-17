@@ -19,6 +19,7 @@ class Mailbox:
     def __init__(self, server, port, user, password, folder="INBOX"):
         self.imap = imaplib.IMAP4_SSL(server, port, timeout=60)
         self.imap.login(user, password)
+        self.folder = folder
         typ, data = self.imap.select(f'"{folder}"', readonly=True)
         if typ != "OK":
             raise RuntimeError(f"Nu pot deschide folderul {folder}: {data}")
@@ -32,9 +33,9 @@ class Mailbox:
         except Exception:
             pass
 
-    def list_messages(self, days=7, sender="", subject="", limit=300):
+    def list_messages(self, days=7, sender="", subject="", limit=300, unread_only=False):
         """Mailurile (cele mai noi primele) care pot avea atașamente."""
-        crit = []
+        crit = ["UNSEEN"] if unread_only else []
         if days:
             d = date.today() - timedelta(days=days)
             crit += ["SINCE", f"{d.day:02d}-{_MONTHS[d.month - 1]}-{d.year}"]
@@ -47,7 +48,7 @@ class Mailbox:
         if not uids:
             return []
 
-        typ, data = self.imap.uid("FETCH", b",".join(uids), f"(UID {_HEADERS})")
+        typ, data = self.imap.uid("FETCH", b",".join(uids), f"(UID FLAGS {_HEADERS})")
         if typ != "OK":
             raise RuntimeError(f"Citirea mailurilor a eșuat: {data}")
         out = []
@@ -69,8 +70,10 @@ class Mailbox:
                 when = parsedate_to_datetime(hdr.get("Date"))
             except Exception:
                 when = None
+            flags = re.search(rb"FLAGS \(([^)]*)\)", item[0])
             out.append({
                 "uid": m.group(1).decode(),
+                "unread": not (flags and b"\\Seen" in flags.group(1)),
                 "subject": subj or "(fără subiect)",
                 "from": _decode(hdr.get("From")),
                 "date": when,
@@ -78,6 +81,14 @@ class Mailbox:
             })
         out.sort(key=lambda x: x["date"].timestamp() if x["date"] else 0, reverse=True)
         return out
+
+    def mark_read(self, uids):
+        """Marchează mailurile ca citite (doar asta se modifică în căsuța de mail)."""
+        uids = [str(u) for u in uids if str(u).isdigit()]
+        if not uids:
+            return
+        self.imap.select(f'"{self.folder}"', readonly=False)
+        self.imap.uid("STORE", ",".join(uids), "+FLAGS", "(\\Seen)")
 
     def pdf_attachments(self, uid):
         """[(nume_fisier, bytes)] pentru toate PDF-urile din mailul `uid`."""

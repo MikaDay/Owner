@@ -122,7 +122,7 @@ def index():
             m["downloaded"] = m["message_id"] in seen
     return render_template("index.html", messages=messages, searched=searched, error=error,
                            days=days, sender=sender, subject=subject, copies=COPIES, last=LAST,
-                           account=MAIL["user"], mail_ready=mail_ready)
+                           account=MAIL["user"], mail_ready=mail_ready, default_subject=DEFAULT_SUBJECT)
 
 
 def _jobs_dir():
@@ -151,21 +151,46 @@ def prepare():
     uids = request.form.getlist("uid")
     if not uids:
         return redirect(request.referrer or url_for("index"))
-
-    path, items, problems = _new_job()
+    labels = {u: (request.form.get(f"subj_{u}", u), request.form.get(f"mid_{u}", "")) for u in uids}
     try:
         with Mailbox(**MAIL) as mb:
-            for uid in uids:
-                pdfs = mb.pdf_attachments(uid)
-                if not pdfs:
-                    problems.append(f"Mailul „{request.form.get(f'subj_{uid}', uid)}” nu are PDF atașat.")
-                    continue
-                for name, data in pdfs:
-                    _add_item(path, items, problems, name, data, request.form.get(f"mid_{uid}", ""))
+            token, problems = _job_from_mail(mb, labels)
     except Exception as e:
-        shutil.rmtree(path, ignore_errors=True)
         return render_template("message.html", title="Nu m-am putut conecta la mail", text=_friendly_error(e))
-    return _job_response(_save_job(path, items, problems), problems, "Mailurile alese nu au PDF-uri.")
+    return _job_response(token, problems, "Mailurile alese nu au PDF-uri.")
+
+
+@app.route("/noi")
+@login_required
+def new_orders():
+    """Un singur pas: toate comenzile necitite din ultimele 30 de zile → pagina de verificare."""
+    if not (MAIL["user"] and MAIL["password"]):
+        return redirect(url_for("index"))
+    try:
+        with Mailbox(**MAIL) as mb:
+            found = mb.list_messages(days=30, sender=DEFAULT_FROM, subject=DEFAULT_SUBJECT, unread_only=True)
+            if not found:
+                return render_template("message.html", title="Nicio comandă nouă",
+                                       text="Nu există comenzi necitite în ultimele 30 de zile. "
+                                            "Comenzile deja descărcate de aici sunt marcate ca citite în mail.",
+                                       back=url_for("index"))
+            token, problems = _job_from_mail(mb, {m["uid"]: (m["subject"], m["message_id"]) for m in found})
+    except Exception as e:
+        return render_template("message.html", title="Nu m-am putut conecta la mail", text=_friendly_error(e))
+    return _job_response(token, problems, "Comenzile necitite nu au PDF-uri.")
+
+
+def _job_from_mail(mb, labels):
+    """labels: {uid: (subiect, message_id)} → (token, probleme)."""
+    path, items, problems = _new_job()
+    for uid, (subj, mid) in labels.items():
+        pdfs = mb.pdf_attachments(uid)
+        if not pdfs:
+            problems.append(f"Mailul „{subj}” nu are PDF atașat.")
+            continue
+        for name, data in pdfs:
+            _add_item(path, items, problems, name, data, mid, uid)
+    return _save_job(path, items, problems), problems
 
 
 @app.route("/upload", methods=["POST"])
@@ -225,7 +250,7 @@ def _new_job():
     return path, [], []
 
 
-def _add_item(path, items, problems, name, data, message_id=""):
+def _add_item(path, items, problems, name, data, message_id="", uid=""):
     try:
         out, pages = process_bytes(data, COPIES, LAST, name)
     except Exception as e:
@@ -243,6 +268,7 @@ def _add_item(path, items, problems, name, data, message_id=""):
         "total": page_count(data),
         "pages": pages,
         "message_id": message_id,
+        "uid": uid,
     })
 
 
@@ -298,6 +324,7 @@ def export(token):
         return redirect(url_for("review", token=token))
     names = {i: safe_filename(request.form.get(f"name_{i}", "").strip() or items[i]["name"]) for i in chosen}
     _mark_downloaded([items[i]["message_id"] for i in chosen])
+    _mark_read([items[i].get("uid") for i in chosen])
 
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
     if request.form.get("mode") == "xlsx":
@@ -331,6 +358,19 @@ def export(token):
                          download_name=names[chosen[0]] + ".pdf")
     data = merge([(path / f"{i}.pdf").read_bytes() for i in chosen])
     return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=f"transporturi_{stamp}.pdf")
+
+
+def _mark_read(uids):
+    """După descărcare, mailurile devin „citite”, ca butonul „Comenzi noi” să nu le mai ia.
+    O eroare aici nu trebuie să oprească descărcarea."""
+    uids = [u for u in uids if u]
+    if not uids or not (MAIL["user"] and MAIL["password"]):
+        return
+    try:
+        with Mailbox(**MAIL) as mb:
+            mb.mark_read(uids)
+    except Exception as e:
+        app.logger.warning("Nu am putut marca mailurile ca citite: %s", e)
 
 
 def _friendly_error(e):

@@ -11,6 +11,13 @@
   <span>&nbsp;din fiecare PDF de 6 pagini</span>
 </div>
 
+{% if mail_ready %}
+<a class="newbtn" href="{{ url_for('new_orders') }}" id="newbtn">
+  <strong>Comenzi noi</strong>
+  <small id="newhint">Ia toate mailurile necitite{% if default_subject %} cu „{{ default_subject }}” în subiect{% endif %}, le procesează și le marchează ca citite după descărcare.</small>
+</a>
+{% endif %}
+
 <form class="upload" method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" id="up">
   <input type="file" name="pdf" id="pdf" accept="application/pdf,.pdf" multiple>
   <label for="pdf" class="pick" id="pick">
@@ -38,14 +45,14 @@
   {% if messages %}
   <form method="post" action="{{ url_for('prepare') }}" id="dl">
     <div class="top">
-      <p class="muted">{{ messages|length }} mailuri găsite. Cele noi sunt deja bifate.</p>
+      <p class="muted">{{ messages|length }} mailuri găsite. Cele necitite sunt deja bifate.</p>
       <div class="tools"><button type="button" data-sel="all">Toate</button><button type="button" data-sel="new">Doar noi</button><button type="button" data-sel="none">Niciunul</button></div>
     </div>
     <div class="list">
     {% for m in messages %}
       <label class="row">
-        <input type="checkbox" name="uid" value="{{ m.uid }}" {% if not m.downloaded %}checked{% endif %} data-new="{{ 0 if m.downloaded else 1 }}">
-        <span class="subj">{{ m.subject }}{% if m.downloaded %}<span class="badge">descărcat</span>{% endif %}</span>
+        <input type="checkbox" name="uid" value="{{ m.uid }}" {% if m.unread and not m.downloaded %}checked{% endif %} data-new="{{ 1 if m.unread and not m.downloaded else 0 }}">
+        <span class="subj">{{ m.subject }}{% if m.downloaded %}<span class="badge">descărcat</span>{% elif not m.unread %}<span class="badge read">citit</span>{% endif %}</span>
         <span class="meta">{{ m.date.strftime('%d.%m.%Y %H:%M') if m.date else '' }} · {{ m.from }}</span>
         <input type="hidden" name="mid_{{ m.uid }}" value="{{ m.message_id }}">
         <input type="hidden" name="subj_{{ m.uid }}" value="{{ m.subject }}">
@@ -63,6 +70,13 @@
 {% endif %}
 
 <script>
+(() => {
+  const b = document.getElementById("newbtn");
+  if (b) b.addEventListener("click", () => {
+    b.classList.add("busy");
+    document.getElementById("newhint").textContent = "Se caută și se procesează comenzile… poate dura un minut.";
+  });
+})();
 (() => {
   const up = document.getElementById("up"), pdf = document.getElementById("pdf");
   pdf.addEventListener("change", () => {

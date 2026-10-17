@@ -68,6 +68,13 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--tc); outlin
 #pdf { position: absolute; width: 1px; height: 1px; opacity: 0; }
 #pdf:focus-visible + .pick { outline: 3px solid var(--tc); outline-offset: 2px; }
 .small { font-size: 0.88rem; }
+.newbtn { display: flex; flex-direction: column; gap: 4px; padding: 18px; border-radius: 10px; text-decoration: none;
+  background: var(--accent); color: var(--accent-ink); }
+.newbtn strong { font-size: 1.25rem; }
+.newbtn small { font-size: 0.88rem; opacity: .85; }
+.newbtn.busy { opacity: .7; pointer-events: none; }
+.newbtn:focus-visible { outline: 3px solid var(--tc); outline-offset: 2px; }
+.badge.read { border-color: var(--line); color: var(--muted); }
 .steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 14px; }
 .steps ul { padding-left: 18px; margin: 6px 0 0; display: flex; flex-direction: column; gap: 6px; }
 code { font-family: var(--mono); font-size: 0.85em; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
