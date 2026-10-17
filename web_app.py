@@ -248,7 +248,9 @@ def _add_item(path, items, problems, name, data, message_id=""):
 
 def _summary(d):
     """Rândul scurt de sub fiecare document, ex. „Dragomiresti Deal → Timisoara · 30.09 · 2.300,00 RON”."""
-    route = " → ".join(p.split(", ")[-1] for p in (d["loading"], d["unloading"]) if p)
+    # Doar orașele: „Altex Depozit Central, Dragomiresti Deal” → „Dragomiresti Deal”
+    route = " → ".join(p.split(" → ")[i].rsplit(", ", 1)[-1]
+                       for p, i in ((d["loading"], 0), (d["unloading"], -1)) if p)
     when = d["loading_date"].strftime("%d.%m") if d["loading_date"] else ""
     price = (f"{d['price']:,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".") + f" {d['currency']}"
              if d["price"] is not None else "")

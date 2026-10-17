@@ -44,33 +44,47 @@ def _number(value):
         return None
 
 
+_COMPANY = re.compile(r"\b(S\.?R\.?L|S\.?A|GmbH|LTD|Kft|s\.?r\.?o|Sp\.? z o\.?o|B\.?V|N\.?V|AG|SAS|SpA)\b\.?", re.I)
+_COUNTY = re.compile(r"^(.+?),?\s+Jud(?:etul|e[tț]ul|\.)?\s*([A-Za-z]{1,2})\.?$", re.I)
+
+
 def _stops(lines, kind):
-    """Locurile de încărcare/descărcare: [(nume, oraș, dată)], în ordine."""
+    """Locurile de încărcare/descărcare: [(nume, oraș, dată)], în ordine.
+
+    Blocul de adresă poate conține și mențiuni (ex. „R.F. prin … Urlati 106300”)
+    înaintea adresei reale, așa că orașul e ultima linie „cod poștal + oraș” din bloc,
+    iar numele e firma cea mai apropiată de deasupra ei (sau prima linie din bloc)."""
     stops = []
     header = re.compile(rf"^\d+\.\s*Loc de {kind}", re.I)
     date_re = re.compile(rf"^Data {kind}:\s*(\S+)", re.I)
     for i, line in enumerate(lines):
         if not header.match(line):
             continue
-        name = city = date = ""
-        for nxt in lines[i + 1:i + 12]:
+        block, date = [], ""
+        for nxt in lines[i + 1:i + 16]:
             m = date_re.match(nxt)
             if m:
                 date = m.group(1)
                 break
-            if not name:
-                name = nxt
-            elif not city:
-                pc = _POSTAL_CITY.match(nxt)
-                if pc:
-                    city = pc.group(1)
+            block.append(nxt)
+        city_at = max((k for k, ln in enumerate(block) if _POSTAL_CITY.match(ln)), default=None)
+        city = name = ""
+        if city_at is not None:
+            city = _POSTAL_CITY.match(block[city_at]).group(1).strip()
+            county = _COUNTY.match(city)
+            if county:
+                city = f"{county.group(1).strip()} ({county.group(2).upper()})"
+            name = next((block[k] for k in range(city_at - 1, -1, -1) if _COMPANY.search(block[k])), "")
+        if not name and block:
+            name = block[0]
         stops.append((name, city, date))
     return stops
 
 
 def _place(stops):
-    return " → ".join(", ".join(p for p in (name, city.title() if city.isupper() else city) if p)
-                      for name, city, _ in stops)
+    def nice(city):
+        return city.title() if city.isupper() else city
+    return " → ".join(", ".join(p for p in (name, nice(city)) if p) for name, city, _ in stops)
 
 
 def parse_order(text):
