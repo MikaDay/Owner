@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fetch_mail import fetch_pdfs
-from process_pdf import first_page_text, page_count, process_bytes, safe_filename
+from process_pdf import details_text, page_count, process_bytes, safe_filename
 from transport_order import build_register, parse_order
 
 
@@ -35,7 +35,7 @@ def process_all(files, output_dir, copies, last, expected):
         except Exception as e:  # un PDF stricat nu trebuie să oprească restul
             print(f"  EROARE {Path(src).name}: {e}")
             continue
-        details = parse_order(first_page_text(data))
+        details = parse_order(details_text(data))
         number = details["order_no"]
         name = safe_filename(f"Comanda {number}" if number else f"{Path(src).stem}_procesat")
         dst = _unique(Path(output_dir) / f"{name}.pdf")

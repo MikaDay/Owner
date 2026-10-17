@@ -88,7 +88,12 @@ def _stops(lines, kind):
 def _place(stops):
     def nice(city):
         return city.title() if city.isupper() else city
-    return " → ".join(", ".join(p for p in (name, nice(city)) if p) for name, city, _ in stops)
+    places = []
+    for name, city, _ in stops:
+        p = ", ".join(x for x in (name, nice(city)) if x)
+        if p and (not places or places[-1] != p):   # același loc de 4 ori → o singură dată
+            places.append(p)
+    return " → ".join(places)
 
 
 def is_transport_order(text):

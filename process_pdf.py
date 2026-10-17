@@ -7,19 +7,62 @@ from pathlib import Path
 from pypdf import PdfReader, PdfWriter
 
 
-def page_order(total, first_page_copies=2, last_pages=3):
+def page_order(total, first_page_copies=2, last_pages=3, detail_pages=1):
     """Indicii (de la 0) paginilor păstrate. Pentru 6 pagini: 0, 0, 3, 4, 5.
 
-    Prima pagină nu e repetată la final dacă documentul e prea scurt."""
-    start_last = max(1, total - last_pages)
-    return [0] * first_page_copies + list(range(start_last, total))
+    Când detaliile transportului se întind pe mai multe pagini (ex. 3 din 8),
+    se repetă tot setul: 0, 1, 2, 0, 1, 2, 5, 6, 7. Paginile de detalii nu
+    sunt repetate la final dacă documentul e prea scurt."""
+    detail_pages = max(1, min(detail_pages, total))
+    start_last = max(detail_pages, total - last_pages)
+    return list(range(detail_pages)) * first_page_copies + list(range(start_last, total))
+
+
+# Începutul paginilor care NU sunt detalii de transport: instrucțiunile ePOD și termenii.
+_NOT_DETAILS = re.compile(r"Platform[aă]\s+ePOD\s*[–-]|TERMENI\s+SI\s+CONDITII", re.I)
+
+
+# Ce are o pagină de detalii: locuri de încărcare/descărcare, prețul, nr. camionului.
+_DETAILS = re.compile(r"Loc\s+de\s+(?:in|des)carcare|Transport:\s*[\d.]|inmatriculare\s+camion", re.I)
+
+
+def page_texts(reader):
+    out = []
+    for page in reader.pages:
+        try:
+            out.append(page.extract_text() or "")
+        except Exception:
+            out.append("")
+    return out
+
+
+def count_detail_pages(texts):
+    """Câte pagini de la început conțin detaliile transportului (cel puțin 1).
+
+    Dacă documentul nu are pagini ePOD / termeni recunoscute (alt format, PDF scanat),
+    rămâne regula simplă: doar prima pagină."""
+    if not any(_NOT_DETAILS.search(t) for t in texts):
+        return 1
+    n = 1
+    while n < len(texts) and not _NOT_DETAILS.search(texts[n]) and _DETAILS.search(texts[n]):
+        n += 1
+    return n
+
+
+def details_text(data):
+    """Textul paginilor de detalii (pentru numărul comenzii și registrul Excel)."""
+    try:
+        texts = page_texts(PdfReader(io.BytesIO(data)))
+    except Exception:
+        return ""
+    return "\n".join(texts[:count_detail_pages(texts)])
 
 
 def _reorder(reader, first_page_copies, last_pages, name):
     total = len(reader.pages)
     if total == 0:
         raise ValueError(f"{name}: PDF-ul nu are pagini")
-    order = page_order(total, first_page_copies, last_pages)
+    order = page_order(total, first_page_copies, last_pages, count_detail_pages(page_texts(reader)))
     writer = PdfWriter()
     for i in order:
         writer.add_page(reader.pages[i])
@@ -68,7 +111,7 @@ _ORDER_PATTERNS = [re.compile(p, re.I) for p in (
     r"comand[aă]\s+(?:de\s+)?transport\s*(?:nr|no)\.?\s*[:#]?\s*" + _ID,
     r"(?:nr|num[aă]r|no|number)\.?\s*(?:de\s+)?(?:comand[aă]|order|transport|cmr)\s*[:#.]?\s*" + _ID,
     r"(?:comand[aă]|order|transport|cmr)(?:\s+de\s+transport)?\s*(?:nr|no|number)?\.?\s*[:#]?\s*" + _ID,
-    r"\b(?:nr|no)\.?\s*[:#]?\s*" + _ID,
+    r"(?<!VAT )\b(?:nr|no)\.?\s*[:#]?\s*" + _ID,   # nu „VAT No: RO46318372” (codul de TVA)
 )]
 
 
@@ -91,7 +134,7 @@ def first_page_text(data):
 
 def order_number(data):
     """Numărul comenzii din PDF (bytes) sau "" dacă nu e găsit (ex. PDF scanat)."""
-    return find_order_number(first_page_text(data))
+    return find_order_number(details_text(data))
 
 
 def page_count(data):

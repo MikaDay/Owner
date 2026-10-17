@@ -26,7 +26,7 @@ from flask import (Flask, abort, redirect, render_template, request, send_file,
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from mailbox_client import Mailbox
-from process_pdf import first_page_text, merge, page_count, process_bytes, safe_filename
+from process_pdf import details_text, merge, page_count, process_bytes, safe_filename
 from transport_order import build_register, is_transport_order, parse_order
 
 app = Flask(__name__)
@@ -195,7 +195,7 @@ def _job_from_mail(mb, labels, orders_only=False):
     for uid, (subj, mid) in labels.items():
         pdfs = mb.pdf_attachments(uid)
         if orders_only:
-            pdfs = [(n, d) for n, d in pdfs if is_transport_order(first_page_text(d))]
+            pdfs = [(n, d) for n, d in pdfs if is_transport_order(details_text(d))]
             if not pdfs:
                 skipped += 1
                 continue
@@ -273,7 +273,7 @@ def _add_item(path, items, problems, name, data, message_id="", uid=""):
     except Exception as e:
         problems.append(f"{name}: nu pot citi PDF-ul ({e}).")
         return
-    details = parse_order(first_page_text(data))
+    details = parse_order(details_text(data))
     number = details["order_no"]
     (path / f"{len(items)}.pdf").write_bytes(out)
     (path / f"{len(items)}.orig.pdf").write_bytes(data)

@@ -198,12 +198,25 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
   const getLast = () => Math.max(0, Math.min(20, parseInt($("last").value, 10) || 0));
   const getExpected = () => Math.max(1, parseInt($("expected").value, 10) || 6);
 
-  // Same rule as the desktop app: page 1 × copies, then the last N pages (never page 1 again).
-  function pageOrder(total, copies, last) {
-    const start = Math.max(1, total - last);
-    const order = Array(copies).fill(0);
+  // Same rule as the server: the transport-detail pages × copies, then the last N pages.
+  // Details are usually page 1; some orders run over 3 pages (1, 2, 3, 1, 2, 3, 6, 7, 8).
+  function pageOrder(total, copies, last, detail = 1) {
+    detail = Math.max(1, Math.min(detail, total));
+    const start = Math.max(detail, total - last);
+    const order = [];
+    for (let c = 0; c < copies; c++) for (let i = 0; i < detail; i++) order.push(i);
     for (let i = start; i < total; i++) order.push(i);
     return order;
+  }
+  // Detail pages = leading pages before the ePOD instructions or the terms and conditions.
+  const NOT_DETAILS = /Platform[aă]\s+ePOD\s*[–-]|TERMENI\s+SI\s+CONDITII/i;
+  // A following page counts only if it also has order content (stops, price, truck plate).
+  const DETAILS = /Loc\s+de\s+(?:in|des)carcare|Transport:\s*[\d.]|inmatriculare\s+camion/i;
+  function countDetailPages(texts) {
+    if (!texts.some((t) => NOT_DETAILS.test(t))) return 1;
+    let n = 1;
+    while (n < texts.length && !NOT_DETAILS.test(texts[n]) && DETAILS.test(texts[n])) n++;
+    return n;
   }
 
   // Order number from page-1 text, e.g. "Nr. comandă: TR-2026/1458", "Comanda transport nr 884213".
@@ -214,7 +227,7 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
     new RegExp("comand[aă]\\s+(?:de\\s+)?transport\\s*(?:nr|no)\\.?\\s*[:#]?\\s*" + ID, "i"),
     new RegExp("(?:nr|num[aă]r|no|number)\\.?\\s*(?:de\\s+)?(?:comand[aă]|order|transport|cmr)\\s*[:#.]?\\s*" + ID, "i"),
     new RegExp("(?:comand[aă]|order|transport|cmr)(?:\\s+de\\s+transport)?\\s*(?:nr|no|number)?\\.?\\s*[:#]?\\s*" + ID, "i"),
-    new RegExp("\\b(?:nr|no)\\.?\\s*[:#]?\\s*" + ID, "i"),
+    new RegExp("(?<!VAT )\\b(?:nr|no)\\.?\\s*[:#]?\\s*" + ID, "i"),  // not "VAT No: RO…"
   ];
   function findOrderNumber(text) {
     const flat = text.replace(/\s+/g, " ");
@@ -226,12 +239,12 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
   }
   const safeFile = (s) => s.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
 
-  function drawOrder(total) {
-    const order = pageOrder(total, getCopies(), getLast());
+  function drawOrder(total, detail = 1) {
+    const order = pageOrder(total, getCopies(), getLast(), detail);
     const kept = new Set(order);
     const tile = (i, isOrig) => {
       const el = document.createElement("div");
-      el.className = "pg " + (i === 0 ? "tr" : (kept.has(i) ? "tc" : "")) + (isOrig && !kept.has(i) ? " off" : "");
+      el.className = "pg " + (i < detail ? "tr" : (kept.has(i) ? "tc" : "")) + (isOrig && !kept.has(i) ? " off" : "");
       el.textContent = i + 1;
       return el;
     };
@@ -245,9 +258,13 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
     if (window.pdfjsLib) {
       try {
         entry.pdfjs = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
-        const page = await entry.pdfjs.getPage(1);
-        const text = (await page.getTextContent()).items.map((it) => it.str).join(" ");
-        entry.orderNo = findOrderNumber(text);
+        const texts = [];
+        for (let n = 1; n <= entry.pdfjs.numPages; n++) {
+          const page = await entry.pdfjs.getPage(n);
+          texts.push((await page.getTextContent()).items.map((it) => it.str).join(" "));
+        }
+        entry.detail = countDetailPages(texts);
+        entry.orderNo = findOrderNumber(texts.slice(0, entry.detail).join(" "));
       } catch (e) { entry.pdfjs = null; }
     }
     const base = entry.name.replace(/\.pdf$/i, "");
@@ -259,7 +276,7 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
     const src = await PDFDocument.load(entry.bytes, { ignoreEncryption: true });
     entry.total = src.getPageCount();
     if (!entry.total) throw new Error("PDF-ul nu are pagini");
-    entry.order = pageOrder(entry.total, getCopies(), getLast());
+    entry.order = pageOrder(entry.total, getCopies(), getLast(), entry.detail || 1);
     const out = await PDFDocument.create();
     (await out.copyPages(src, entry.order)).forEach((p) => out.addPage(p));
     entry.out = await out.save();
@@ -282,7 +299,7 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
     entry.order.forEach((src, pos) => {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "thumb " + (src === 0 ? "tr" : "tc");
+      b.className = "thumb " + (src < (entry.detail || 1) ? "tr" : "tc");
       b.setAttribute("aria-label", `Pagina ${pos + 1} din rezultat (originalul ${src + 1})`);
       const ph = document.createElement("div"); ph.className = "ph";
       const cap = document.createElement("span"); cap.textContent = `${src + 1}`;
@@ -425,7 +442,7 @@ details ol { padding-left: 20px; margin: 10px 0 0; display: flex; flex-direction
       ? (ready ? `Salvează un singur PDF (${ready} documente)` : "Salvează PDF-ul")
       : (ready > 1 ? `Salvează toate (${ready})` : "Salvează PDF-ul");
     const first = files.find((f) => f.total);
-    drawOrder(first ? first.total : getExpected());
+    drawOrder(first ? first.total : getExpected(), first ? first.detail || 1 : 1);
   }
 
   async function addFiles(list) {
