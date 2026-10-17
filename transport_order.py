@@ -16,7 +16,8 @@ from openpyxl.utils import get_column_letter
 from process_pdf import find_order_number
 
 _POSTAL_CITY = re.compile(r"^(?:[A-Z]{1,2}-?\s?)?\d{4,6}\s+(.+)$")  # „310210 Arad”, „D-80331 Munchen”
-_GOODS = re.compile(r"^(\d+)\s+(\S+)\s+(.+?)\s+([\d.,]+)\s*kg\s+([\d.,]+)\s*$", re.I)
+# „1 TRUNK Electrocasnice 20000 kg 13.60” — descrierea poate lipsi: „1 TRUNK 20000 kg 13.60”
+_GOODS = re.compile(r"^(\d+)\s+(\S+)\s+(?:(.+?)\s+)?([\d.,]+)\s*kg\s+([\d.,]+)\s*$", re.I)
 
 
 def _find(pattern, text, flags=re.I):
@@ -104,7 +105,7 @@ def parse_order(text):
         if ln.lower().startswith("bucati") and i + 1 < len(lines):
             m = _GOODS.match(lines[i + 1])
             if m:
-                goods, weight, ldm = m.group(3), m.group(4), m.group(5)
+                goods, weight, ldm = m.group(3) or "", m.group(4), m.group(5)
             break
 
     order_no = find_order_number(text)
