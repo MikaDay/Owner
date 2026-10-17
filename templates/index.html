@@ -29,7 +29,7 @@
 
 {% if mail_ready %}
 <div class="label">sau caută direct în mail</div>
-<form class="search" method="get">
+<form class="search" method="get" id="search">
   <label>Ultimele zile <input type="number" name="days" min="1" max="365" value="{{ days }}" inputmode="numeric"></label>
   <label style="grid-column: span 2">Expeditor (opțional) <input type="text" name="from" value="{{ sender }}" placeholder="ex: comenzi@firma.ro" autocapitalize="off"></label>
   <label class="wide">Subiectul conține (opțional) <input type="text" name="subject" value="{{ subject }}" placeholder="ex: comandă transport"></label>
@@ -71,18 +71,20 @@
 
 <script>
 (() => {
+  const sf = document.getElementById("search");
+  if (sf) oncePerSubmit(sf, "Se caută în mail…");
   const b = document.getElementById("newbtn");
-  if (b) b.addEventListener("click", () => {
+  if (b) b.addEventListener("click", (e) => {
+    if (b.classList.contains("busy")) { e.preventDefault(); return; }
     b.classList.add("busy");
-    document.getElementById("newhint").textContent = "Se caută și se procesează comenzile… poate dura un minut.";
+    showWait("Se caută comenzile noi și se pregătesc…");
   });
 })();
 (() => {
   const up = document.getElementById("up"), pdf = document.getElementById("pdf");
   pdf.addEventListener("change", () => {
     if (!pdf.files.length) return;
-    document.getElementById("pick").classList.add("busy");
-    document.getElementById("pickhint").textContent = `Se procesează ${pdf.files.length} PDF-uri…`;
+    showWait(`Se pregătesc ${pdf.files.length} PDF-uri…`);
     up.submit();
   });
 })();
@@ -102,11 +104,8 @@
     boxes.forEach(x => x.checked = b.dataset.sel === "all" || (b.dataset.sel === "new" && x.dataset.new === "1"));
     update();
   });
-  form.addEventListener("submit", () => {
-    count.textContent = "Se descarcă și se procesează… poate dura puțin.";
-    btns.forEach(b => b.disabled = true);
-    setTimeout(update, 15000);
-  });
+  oncePerSubmit(form, () => `Se pregătesc ${boxes.filter(b => b.checked).length} comenzi…`);
+  window.addEventListener("pageshow", () => document.getElementById("newbtn")?.classList.remove("busy"));
   update();
 })();
 </script>

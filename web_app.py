@@ -26,7 +26,7 @@ from flask import (Flask, abort, redirect, render_template, request, send_file,
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from mailbox_client import Mailbox
-from process_pdf import details_text, merge, page_count, process_bytes, safe_filename
+from process_pdf import analyse, merge, safe_filename
 from transport_order import build_register, is_transport_order, parse_order
 
 app = Flask(__name__)
@@ -194,16 +194,14 @@ def _job_from_mail(mb, labels, orders_only=False):
     skipped = 0
     for uid, (subj, mid) in labels.items():
         pdfs = mb.pdf_attachments(uid)
-        if orders_only:
-            pdfs = [(n, d) for n, d in pdfs if is_transport_order(details_text(d))]
-            if not pdfs:
-                skipped += 1
-                continue
-        if not pdfs:
+        if not pdfs and not orders_only:
             problems.append(f"Mailul „{subj}” nu are PDF atașat.")
             continue
+        added = 0
         for name, data in pdfs:
-            _add_item(path, items, problems, name, data, mid, uid)
+            added += _add_item(path, items, problems, name, data, mid, uid, orders_only=orders_only)
+        if orders_only and not added:
+            skipped += 1
     if skipped:
         problems.append(f"Am sărit {skipped} mailuri care nu conțin o comandă de transport "
                         "(rămân necitite în mail).")
@@ -267,13 +265,18 @@ def _new_job():
     return path, [], []
 
 
-def _add_item(path, items, problems, name, data, message_id="", uid=""):
+def _add_item(path, items, problems, name, data, message_id="", uid="", orders_only=False):
+    """Procesează un PDF și îl adaugă în pregătire. Întoarce 1 dacă a fost adăugat."""
     try:
-        out, pages = process_bytes(data, COPIES, LAST, name)
+        r = analyse(data, COPIES, LAST, name)   # o singură citire a PDF-ului
     except Exception as e:
-        problems.append(f"{name}: nu pot citi PDF-ul ({e}).")
-        return
-    details = parse_order(details_text(data))
+        if not orders_only:
+            problems.append(f"{name}: nu pot citi PDF-ul ({e}).")
+        return 0
+    if orders_only and not is_transport_order(r["text"]):
+        return 0
+    out, pages = r["out"], r["pages"]
+    details = parse_order(r["text"])
     number = details["order_no"]
     (path / f"{len(items)}.pdf").write_bytes(out)
     (path / f"{len(items)}.orig.pdf").write_bytes(data)
@@ -283,11 +286,12 @@ def _add_item(path, items, problems, name, data, message_id="", uid=""):
         "summary": _summary(details),
         "order_no": number,
         "name": safe_filename(f"Comanda {number}" if number else name[:-4] + "_procesat"),
-        "total": page_count(data),
+        "total": r["total"],
         "pages": pages,
         "message_id": message_id,
         "uid": uid,
     })
+    return 1
 
 
 def _summary(d):
@@ -322,8 +326,18 @@ def _job_response(token, problems, empty_text):
 @app.route("/review/<token>")
 def review(token):
     _, job = _job(token)
-    return render_template("review.html", token=token, items=job["items"], problems=job["problems"],
-                           expected=EXPECTED_PAGES)
+    indexed = list(enumerate(job["items"]))
+    groups = [(title, docs) for title, docs in (
+        ("Cu Toll_RO", [(i, it) for i, it in indexed if _is_toll(it)]),
+        ("Fără Toll_RO", [(i, it) for i, it in indexed if not _is_toll(it)]),
+    ) if docs]
+    return render_template("review.html", token=token, items=job["items"], groups=groups,
+                           grouped=len(groups) > 1, problems=job["problems"], expected=EXPECTED_PAGES)
+
+
+def _is_toll(item):
+    """Comanda are mențiunea „taxa Toll_RO se va factura separat”."""
+    return bool((item.get("details") or {}).get("toll_ro"))
 
 
 @app.route("/file/<token>/<int:i>.pdf")
@@ -348,6 +362,12 @@ def export(token):
     path, job = _job(token)
     items = job["items"]
     chosen = [i for i in range(len(items)) if request.form.get(f"use_{i}")]
+    # „Un singur PDF” se descarcă în două părți: comenzile cu Toll_RO și restul.
+    group = request.form.get("group")
+    if group in ("toll", "rest"):
+        chosen = [i for i in chosen if _is_toll(items[i]) == (group == "toll")]
+        if not chosen:
+            abort(404)
     if not chosen:
         return redirect(url_for("review", token=token))
     names = {i: safe_filename(request.form.get(f"name_{i}", "").strip() or items[i]["name"]) for i in chosen}
@@ -372,20 +392,23 @@ def export(token):
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
             used = set()
             for i in chosen:
-                fname, n = names[i] + ".pdf", 2
+                folder = "Toll_RO/" if _is_toll(items[i]) else ""
+                fname, n = f"{folder}{names[i]}.pdf", 2
                 while fname in used:
-                    fname, n = f"{names[i]} ({n}).pdf", n + 1
+                    fname, n = f"{folder}{names[i]} ({n}).pdf", n + 1
                 used.add(fname)
                 z.write(path / f"{i}.pdf", fname)
         buf.seek(0)
         return send_file(buf, mimetype="application/zip", as_attachment=True,
                          download_name=f"transporturi_{stamp}.zip")
 
+    toll = " - Toll_RO" if group == "toll" else ""
     if len(chosen) == 1:
         return send_file(path / f"{chosen[0]}.pdf", mimetype="application/pdf",
-                         download_name=names[chosen[0]] + ".pdf")
+                         download_name=f"{names[chosen[0]]}{toll}.pdf")
     data = merge([(path / f"{i}.pdf").read_bytes() for i in chosen])
-    return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=f"transporturi_{stamp}.pdf")
+    prefix = "transporturi_Toll_RO" if group == "toll" else "transporturi"
+    return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=f"{prefix}_{stamp}.pdf")
 
 
 def _mark_read(uids):

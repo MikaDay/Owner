@@ -26,14 +26,30 @@ _NOT_DETAILS = re.compile(r"Platform[aă]\s+ePOD\s*[–-]|TERMENI\s+SI\s+CONDITI
 _DETAILS = re.compile(r"Loc\s+de\s+(?:in|des)carcare|Transport:\s*[\d.]|inmatriculare\s+camion", re.I)
 
 
+class _LazyTexts:
+    """Textul paginilor, extras doar când e cerut și o singură dată.
+
+    Extragerea textului e partea lentă (secunde pe serverul gratuit), iar de obicei
+    ajung primele 2 pagini: detaliile și începutul instrucțiunilor ePOD."""
+
+    def __init__(self, reader):
+        self.reader, self._cache = reader, {}
+
+    def __len__(self):
+        return len(self.reader.pages)
+
+    def __getitem__(self, i):
+        if i not in self._cache:
+            try:
+                self._cache[i] = self.reader.pages[i].extract_text() or ""
+            except Exception:
+                self._cache[i] = ""
+        return self._cache[i]
+
+
 def page_texts(reader):
-    out = []
-    for page in reader.pages:
-        try:
-            out.append(page.extract_text() or "")
-        except Exception:
-            out.append("")
-    return out
+    texts = _LazyTexts(reader)
+    return [texts[i] for i in range(len(texts))]
 
 
 def count_detail_pages(texts):
@@ -41,40 +57,47 @@ def count_detail_pages(texts):
 
     Dacă documentul nu are pagini ePOD / termeni recunoscute (alt format, PDF scanat),
     rămâne regula simplă: doar prima pagină."""
-    if not any(_NOT_DETAILS.search(t) for t in texts):
+    first_other = next((i for i in range(len(texts)) if _NOT_DETAILS.search(texts[i])), None)
+    if first_other is None:
         return 1
     n = 1
-    while n < len(texts) and not _NOT_DETAILS.search(texts[n]) and _DETAILS.search(texts[n]):
+    while n < first_other and _DETAILS.search(texts[n]):
         n += 1
     return n
+
+
+def analyse(data, first_page_copies=2, last_pages=3, name="PDF"):
+    """Totul dintr-o singură citire a PDF-ului:
+    {"out": PDF-ul reorganizat, "pages": [1, 1, 4, 5, 6], "total": 6, "text": textul detaliilor}."""
+    reader = PdfReader(io.BytesIO(data))
+    total = len(reader.pages)
+    if total == 0:
+        raise ValueError(f"{name}: PDF-ul nu are pagini")
+    texts = _LazyTexts(reader)
+    detail = count_detail_pages(texts)
+    order = page_order(total, first_page_copies, last_pages, detail)
+    writer = PdfWriter()
+    for i in order:
+        writer.add_page(reader.pages[i])
+    out = io.BytesIO()
+    writer.write(out)
+    return {"out": out.getvalue(), "pages": [i + 1 for i in order], "total": total,
+            "text": "\n".join(texts[i] for i in range(detail))}
 
 
 def details_text(data):
     """Textul paginilor de detalii (pentru numărul comenzii și registrul Excel)."""
     try:
-        texts = page_texts(PdfReader(io.BytesIO(data)))
+        texts = _LazyTexts(PdfReader(io.BytesIO(data)))
+        return "\n".join(texts[i] for i in range(count_detail_pages(texts)))
     except Exception:
         return ""
-    return "\n".join(texts[:count_detail_pages(texts)])
-
-
-def _reorder(reader, first_page_copies, last_pages, name):
-    total = len(reader.pages)
-    if total == 0:
-        raise ValueError(f"{name}: PDF-ul nu are pagini")
-    order = page_order(total, first_page_copies, last_pages, count_detail_pages(page_texts(reader)))
-    writer = PdfWriter()
-    for i in order:
-        writer.add_page(reader.pages[i])
-    return writer, [i + 1 for i in order]
 
 
 def process_bytes(data, first_page_copies=2, last_pages=3, name="PDF"):
     """Ca process_pdf, dar primește și întoarce conținutul PDF-ului (bytes)."""
-    writer, pages = _reorder(PdfReader(io.BytesIO(data)), first_page_copies, last_pages, name)
-    out = io.BytesIO()
-    writer.write(out)
-    return out.getvalue(), pages
+    r = analyse(data, first_page_copies, last_pages, name)
+    return r["out"], r["pages"]
 
 
 def process_pdf(src, dst, first_page_copies=2, last_pages=3):
@@ -84,10 +107,9 @@ def process_pdf(src, dst, first_page_copies=2, last_pages=3):
     Pentru un PDF de 6 pagini rezultatul este: 1, 1, 4, 5, 6.
     Returnează lista indicilor (de la 1) paginilor scrise.
     """
-    writer, pages = _reorder(PdfReader(str(src)), first_page_copies, last_pages, src)
+    out, pages = process_bytes(Path(src).read_bytes(), first_page_copies, last_pages, str(src))
     Path(dst).parent.mkdir(parents=True, exist_ok=True)
-    with open(dst, "wb") as f:
-        writer.write(f)
+    Path(dst).write_bytes(out)
     return pages
 
 

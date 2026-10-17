@@ -101,11 +101,56 @@ a.cta b { color: var(--tc); }
 .viewer canvas { max-width: 100%; max-height: calc(100% - 60px); background: var(--paper); border-radius: 3px; }
 .viewer .vbar { display: flex; gap: 10px; align-items: center; color: #fff; font-family: var(--mono); font-size: 0.85rem; white-space: nowrap; }
 .viewer button { color: #fff; border-color: #fff; padding: 8px 14px; }
+h2.group { font-size: 1rem; margin: 6px 0 -12px; display: flex; gap: 8px; align-items: center; }
+h2.group span { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; }
+.savedbox { background: var(--surface); color: var(--fg); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px; width: min(420px, 100%); }
+.savedbox #savedlinks { display: flex; flex-direction: column; gap: 8px; }
+.savedbox .btn { overflow-wrap: anywhere; font-size: 0.92rem; }
+.savedbox button { color: var(--fg); border-color: var(--fg); }
+.wait { position: fixed; inset: 0; z-index: 30; background: rgba(20, 25, 23, 0.9); color: #fff; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 24px; }
+.wait[hidden] { display: none; }
+.wait strong { font-size: 1.15rem; }
+.wait small { opacity: .8; }
+.wait .t { font-family: var(--mono); font-size: 0.9rem; }
+.spin { width: 42px; height: 42px; border-radius: 50%; border: 4px solid rgba(255,255,255,.25); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
 </style>
+<script>
+// Ecran de așteptare pentru operațiile lungi (citirea mailului, procesarea PDF-urilor).
+// Rămâne până se încarcă pagina următoare; la întoarcerea cu „Înapoi” dispare.
+window.showWait = (text) => {
+  const w = document.getElementById("wait");
+  document.getElementById("waittext").textContent = text;
+  w.hidden = false;
+  const t0 = Date.now(), el = document.getElementById("waittime");
+  clearInterval(window._waitTimer);
+  window._waitTimer = setInterval(() => { el.textContent = Math.round((Date.now() - t0) / 1000) + " s"; }, 1000);
+};
+window.addEventListener("pageshow", () => {
+  document.getElementById("wait").hidden = true;
+  clearInterval(window._waitTimer);
+  document.querySelectorAll("form[data-sent]").forEach((f) => delete f.dataset.sent);
+});
+// Un formular trimis o dată nu mai poate fi retrimis până nu răspunde serverul.
+window.oncePerSubmit = (form, text) => form.addEventListener("submit", (e) => {
+  if (form.dataset.sent) { e.preventDefault(); return; }
+  form.dataset.sent = "1";
+  showWait(typeof text === "function" ? text() : text);
+});
+</script>
 </head>
 <body>
 <div class="wrap">
 {% block body %}{% endblock %}
 </div>
+<div class="wait" id="wait" hidden role="status" aria-live="polite">
+  <div class="spin" aria-hidden="true"></div>
+  <strong id="waittext">Se lucrează…</strong>
+  <small>Nu închide pagina și nu apăsa din nou.</small>
+  <span class="t" id="waittime"></span>
+</div>
+
 </body>
 </html>

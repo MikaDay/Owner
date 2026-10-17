@@ -9,22 +9,25 @@
 {% for p in problems %}<p class="warn" style="margin:0">{{ p }}</p>{% endfor %}
 
 <form method="post" action="{{ url_for('export', token=token) }}" id="exp">
+  {% for title, docs in groups %}
+  {% if grouped %}<h2 class="group">{{ title }} <span>{{ docs|length }}</span></h2>{% endif %}
   <div class="list">
-  {% for it in items %}
+  {% for i, it in docs %}
     <div class="doc">
       <div class="head">
-        <input type="checkbox" name="use_{{ loop.index0 }}" value="1" checked aria-label="Include {{ it.name }}">
-        <input type="text" name="name_{{ loop.index0 }}" value="{{ it.name }}" autocapitalize="off" spellcheck="false" aria-label="Nume fișier">
+        <input type="checkbox" name="use_{{ i }}" value="1" checked data-toll="{{ 1 if title == 'Cu Toll_RO' else 0 }}" aria-label="Include {{ it.name }}">
+        <input type="text" name="name_{{ i }}" value="{{ it.name }}" autocapitalize="off" spellcheck="false" aria-label="Nume fișier">
       </div>
       {% if it.summary %}<div class="route">{{ it.summary }}</div>{% endif %}
-      <div class="src"><a href="{{ url_for('job_original', token=token, i=loop.index0) }}" target="_blank">{{ it.source }}</a> · {{ it.total }} pag. → {{ it.pages|join(", ") }}{% if not it.order_no %} · nr. comandă negăsit{% endif %}</div>
+      <div class="src"><a href="{{ url_for('job_original', token=token, i=i) }}" target="_blank">{{ it.source }}</a> · {{ it.total }} pag. → {{ it.pages|join(", ") }}{% if not it.order_no %} · nr. comandă negăsit{% endif %}</div>
       {% if it.total != expected %}
       <div class="warn">Atenție: are {{ it.total }} pagini, nu {{ expected }}. Verifică miniaturile înainte să printezi.</div>
       {% endif %}
-      <div class="thumbs" data-src="{{ url_for('job_file', token=token, i=loop.index0) }}" data-pages="{{ it.pages|join(',') }}"></div>
+      <div class="thumbs" data-src="{{ url_for('job_file', token=token, i=i) }}" data-pages="{{ it.pages|join(',') }}"></div>
     </div>
   {% endfor %}
   </div>
+  {% endfor %}
   <div class="bar"><div class="in">
     <span class="count" id="count"></span>
     <button class="primary" name="mode" value="merged">Un singur PDF</button>
@@ -32,6 +35,15 @@
     <button name="mode" value="xlsx">Excel</button>
   </div></div>
 </form>
+
+<div class="viewer" id="saved" hidden role="dialog" aria-label="PDF-uri gata">
+  <div class="savedbox">
+    <strong>PDF-urile sunt gata</strong>
+    <small>Dacă unul nu s-a descărcat singur, apasă pe el:</small>
+    <div id="savedlinks"></div>
+    <button type="button" id="savedclose">Închide</button>
+  </div>
+</div>
 
 <div class="viewer" id="viewer" hidden role="dialog" aria-label="Previzualizare pagină">
   <canvas id="big"></canvas>
@@ -106,6 +118,51 @@
   };
   form.addEventListener("change", update);
   update();
+
+  // „Un singur PDF”: două fișiere, unul cu comenzile Toll_RO (dacă există) și unul cu restul.
+  const mergedBtn = form.querySelector('button[value="merged"]');
+  const fileName = (resp, fallback) => {
+    const cd = resp.headers.get("Content-Disposition") || "";
+    const star = cd.match(/filename\*=UTF-8''([^;]+)/i), plain = cd.match(/filename="?([^";]+)"?/i);
+    return star ? decodeURIComponent(star[1]) : plain ? plain[1] : fallback;
+  };
+  mergedBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const picked = boxes.filter((b) => b.checked);
+    const parts = [];
+    if (picked.some((b) => b.dataset.toll === "1")) parts.push(["toll", "Toll_RO"]);
+    if (picked.some((b) => b.dataset.toll !== "1")) parts.push(["rest", "fără Toll_RO"]);
+    if (!parts.length) return;
+    showWait(parts.length > 1 ? "Se pregătesc cele 2 PDF-uri…" : "Se pregătește PDF-ul…");
+    const links = [];
+    try {
+      for (const [group, label] of parts) {
+        const fd = new FormData(form);
+        fd.set("mode", "merged"); fd.set("group", group);
+        const resp = await fetch(form.action, { method: "POST", body: fd });
+        if (!resp.ok) throw new Error(`serverul a răspuns ${resp.status}`);
+        const blob = await resp.blob();
+        const name = fileName(resp, `transporturi_${group}.pdf`);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = name; a.className = "btn";
+        a.textContent = `${label === "Toll_RO" ? "Cu Toll_RO" : "Fără Toll_RO"} · ${name}`;
+        document.body.append(a); a.click(); a.remove();
+        links.push(a);
+        await new Promise((r) => setTimeout(r, 700));   // Safari ignoră a doua descărcare dacă vine prea repede
+      }
+    } catch (err) {
+      alert("Nu s-au putut pregăti PDF-urile: " + err.message);
+    } finally {
+      document.getElementById("wait").hidden = true;
+      clearInterval(window._waitTimer);
+    }
+    if (links.length) {
+      document.getElementById("savedlinks").replaceChildren(...links);
+      document.getElementById("saved").hidden = false;
+    }
+  });
+  document.getElementById("savedclose").onclick = () => { document.getElementById("saved").hidden = true; };
 })();
 </script>
 {% endblock %}
