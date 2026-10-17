@@ -14,7 +14,7 @@
 {% if mail_ready %}
 <a class="newbtn" href="{{ url_for('new_orders') }}" id="newbtn">
   <strong>Comenzi noi</strong>
-  <small id="newhint">Ia toate mailurile necitite{% if default_subject %} cu „{{ default_subject }}” în subiect{% endif %}, le procesează și le marchează ca citite după descărcare.</small>
+  <small id="newhint">Ia toate comenzile de transport din mailurile necitite{% if default_from %} de la {{ default_from }}{% endif %}, le procesează și le marchează ca citite după descărcare.</small>
 </a>
 {% endif %}
 

@@ -88,6 +88,11 @@ def _place(stops):
     return " → ".join(", ".join(p for p in (name, nice(city)) if p) for name, city, _ in stops)
 
 
+def is_transport_order(text):
+    """True dacă prima pagină arată ca o comandă de transport (ex. „Comanda Transport Nr. ARWY01981”)."""
+    return bool(re.search(r"comand[aă]\s+(?:de\s+)?transport", text or "", re.I) and find_order_number(text))
+
+
 def parse_order(text):
     """Dicționar cu detaliile comenzii din textul primei pagini."""
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]

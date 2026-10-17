@@ -27,7 +27,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from mailbox_client import Mailbox
 from process_pdf import first_page_text, merge, page_count, process_bytes, safe_filename
-from transport_order import build_register, parse_order
+from transport_order import build_register, is_transport_order, parse_order
 
 app = Flask(__name__)
 # Render pune serverul în spatele unui proxy HTTPS; așa linkurile generate încep cu https://.
@@ -122,7 +122,7 @@ def index():
             m["downloaded"] = m["message_id"] in seen
     return render_template("index.html", messages=messages, searched=searched, error=error,
                            days=days, sender=sender, subject=subject, copies=COPIES, last=LAST,
-                           account=MAIL["user"], mail_ready=mail_ready, default_subject=DEFAULT_SUBJECT)
+                           account=MAIL["user"], mail_ready=mail_ready, default_from=DEFAULT_FROM)
 
 
 def _jobs_dir():
@@ -174,22 +174,39 @@ def new_orders():
                                        text="Nu există comenzi necitite în ultimele 30 de zile. "
                                             "Comenzile deja descărcate de aici sunt marcate ca citite în mail.",
                                        back=url_for("index"))
-            token, problems = _job_from_mail(mb, {m["uid"]: (m["subject"], m["message_id"]) for m in found})
+            token, problems = _job_from_mail(mb, {m["uid"]: (m["subject"], m["message_id"]) for m in found},
+                                             orders_only=True)
     except Exception as e:
         return render_template("message.html", title="Nu m-am putut conecta la mail", text=_friendly_error(e))
-    return _job_response(token, problems, "Comenzile necitite nu au PDF-uri.")
+    if not token:
+        return render_template("message.html", title="Nicio comandă nouă",
+                               text="Mailurile necitite nu conțin comenzi de transport. " + " ".join(problems),
+                               back=url_for("index"))
+    return _job_response(token, problems, "")
 
 
-def _job_from_mail(mb, labels):
-    """labels: {uid: (subiect, message_id)} → (token, probleme)."""
+def _job_from_mail(mb, labels, orders_only=False):
+    """labels: {uid: (subiect, message_id)} → (token, probleme).
+
+    Cu orders_only, PDF-urile care nu sunt comenzi de transport (facturi, situații…)
+    sunt sărite — comanda se recunoaște după conținut, nu după subiectul mailului."""
     path, items, problems = _new_job()
+    skipped = 0
     for uid, (subj, mid) in labels.items():
         pdfs = mb.pdf_attachments(uid)
+        if orders_only:
+            pdfs = [(n, d) for n, d in pdfs if is_transport_order(first_page_text(d))]
+            if not pdfs:
+                skipped += 1
+                continue
         if not pdfs:
             problems.append(f"Mailul „{subj}” nu are PDF atașat.")
             continue
         for name, data in pdfs:
             _add_item(path, items, problems, name, data, mid, uid)
+    if skipped:
+        problems.append(f"Am sărit {skipped} mailuri care nu conțin o comandă de transport "
+                        "(rămân necitite în mail).")
     return _save_job(path, items, problems), problems
 
 
