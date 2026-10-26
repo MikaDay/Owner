@@ -2,5 +2,15 @@
 {% block body %}
 <div><div class="label">Cirforvest</div><h1>{{ title }}</h1></div>
 <p>{{ text }}</p>
+{% if start_form %}
+<form method="post" action="{{ url_for('new_orders_start') }}" class="startform" id="startform">
+  <label for="day">Ai descărcat comenzi și înainte, din Yahoo? Spune-mi când a fost ultima dată, ca să le iau pe toate venite de atunci (chiar dacă sunt deschise în mail):</label>
+  <div class="row2">
+    <input type="date" id="day" name="day" required value="{{ last_date.isoformat() if last_date else '' }}">
+    <button class="primary" type="submit">Caută de atunci</button>
+  </div>
+</form>
+<script>oncePerSubmit(document.getElementById("startform"), "Se caută comenzile…");</script>
+{% endif %}
 <a class="btn" href="{{ back or 'javascript:history.back()' }}">Înapoi</a>
 {% endblock %}

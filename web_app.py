@@ -27,7 +27,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from mailbox_client import Mailbox
 from process_pdf import analyse, merge, safe_filename
-from new_orders import describe, pick_new, when
+from new_orders import RO, describe, pick_new, when
 from transport_order import build_register, is_transport_order, parse_order
 
 app = Flask(__name__)
@@ -166,6 +166,26 @@ def prepare():
     return _job_response(token, problems, "Mailurile alese nu au PDF-uri.")
 
 
+@app.route("/noi/start", methods=["POST"])
+@login_required
+def new_orders_start():
+    """Spune aplicației când s-au descărcat ultima dată comenzile (ex. înainte să existe jurnalul):
+    „Comenzi noi” va lua apoi și comenzile deschise în mail primite după acea zi."""
+    try:
+        day = date.fromisoformat(request.form.get("day", ""))
+    except ValueError:
+        return redirect(url_for("new_orders"))
+    if day > datetime.now(RO).date():
+        day = datetime.now(RO).date()
+    start = datetime.combine(day, datetime.min.time(), RO)   # începutul zilei alese
+    try:
+        with Mailbox(**MAIL) as mb:
+            mb.save_download([], when=start)
+    except Exception as e:
+        return render_template("message.html", title="Nu am putut salva data", text=_friendly_error(e))
+    return redirect(url_for("new_orders"))
+
+
 @app.route("/noi")
 @login_required
 def new_orders():
@@ -193,7 +213,8 @@ def new_orders():
                 return render_template("message.html", title="Nicio comandă nouă",
                                        text=f"{info[0]} Nu există comenzi necitite sau nedescărcate "
                                             f"în ultimele {NEW_ORDERS_DAYS} de zile.",
-                                       back=url_for("index"))
+                                       back=url_for("index"), start_form=True,
+                                       last_date=(last.astimezone(RO).date() if last else None))
             labels = {m["uid"]: (m["subject"], m["message_id"], describe(reason, last)) for m, reason in picked}
             token, problems = _job_from_mail(mb, labels, orders_only=True, info=info)
     except Exception as e:
