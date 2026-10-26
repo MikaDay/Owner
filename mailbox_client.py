@@ -5,6 +5,7 @@ mesajul complet se descarcă doar pentru mailurile alese.
 """
 
 import email
+import email.utils
 import imaplib
 import json
 import re
@@ -15,7 +16,8 @@ from email.utils import parsedate_to_datetime
 
 from fetch_mail import _MONTHS, _decode, _safe_name
 
-_HEADERS = "BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE MESSAGE-ID CONTENT-TYPE)]"
+_HEADERS = "BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE MESSAGE-ID CONTENT-TYPE X-CIRFORVEST)]"
+APP_HEADER = "X-Cirforvest"   # pe mailurile puse de aplicație în Inbox, ca să nu le ia drept comenzi
 
 # Memoria aplicației stă în căsuța de mail (serverul gratuit își pierde fișierele la repornire):
 # folderul „Cirforvest” conține un singur mesaj cu ce s-a descărcat și când.
@@ -68,6 +70,8 @@ class Mailbox:
             if not m:
                 continue
             hdr = email.message_from_bytes(item[1])
+            if hdr.get(APP_HEADER):
+                continue
             subj = _decode(hdr.get("Subject"))
             if subject and subject.lower() not in subj.lower():
                 continue
@@ -149,6 +153,26 @@ class Mailbox:
                     self.imap.expunge()
         finally:
             self._select(self.folder)
+
+    def deliver_to_inbox(self, address, subject, text, attachments, when=None):
+        """Pune un mail nou (necitit) cu atașamente direct în Inbox-ul contului.
+
+        Serverul gratuit Render nu are voie să trimită mailuri (SMTP blocat), dar
+        destinatarul e chiar contul conectat, așa că mailul se adaugă prin IMAP."""
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = f"Cirforvest <{address}>"
+        msg["To"] = address
+        msg["Date"] = email.utils.formatdate(when, localtime=True)
+        msg["Message-ID"] = email.utils.make_msgid(domain="cirforvest.local")
+        msg[APP_HEADER] = "1"
+        msg.set_content(text)
+        for name, data in attachments:
+            msg.add_attachment(data, maintype="application", subtype="pdf", filename=name)
+        typ, data = self.imap.append(f'"{self.folder}"', "()", imaplib.Time2Internaldate(when or time.time()),
+                                     msg.as_bytes())
+        if typ != "OK":
+            raise RuntimeError(f"Yahoo nu a acceptat mailul: {data}")
 
     def pdf_attachments(self, uid):
         """[(nume_fisier, bytes)] pentru toate PDF-urile din mailul `uid`."""

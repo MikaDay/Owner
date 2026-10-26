@@ -377,6 +377,7 @@ def review(token):
     ) if docs]
     return render_template("review.html", token=token, items=job["items"], groups=groups,
                            grouped=len(groups) > 1, problems=job["problems"], info=job.get("info") or [],
+                           mail_ready=bool(MAIL["user"] and MAIL["password"]),
                            expected=EXPECTED_PAGES)
 
 
@@ -420,6 +421,8 @@ def export(token):
     _record_download([items[i].get("uid") for i in chosen], [items[i]["message_id"] for i in chosen])
 
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+    if request.form.get("mode") == "mail":
+        return _send_by_mail(path, items, chosen, names, token)
     if request.form.get("mode") == "xlsx":
         rows = []
         for i in chosen:
@@ -454,6 +457,39 @@ def export(token):
     data = merge([(path / f"{i}.pdf").read_bytes() for i in chosen])
     prefix = "transporturi_Toll_RO" if group == "toll" else "transporturi"
     return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=f"{prefix}_{stamp}.pdf")
+
+
+def _send_by_mail(path, items, chosen, names, token):
+    """„Trimite pe mail”: două mailuri în Inbox — întâi comenzile cu Toll_RO (dacă există), apoi restul."""
+    now = datetime.now(RO)
+    groups = [(label, [i for i in chosen if _is_toll(items[i]) == toll])
+              for label, toll in (("Toll_RO", True), ("fără Toll_RO", False))]
+    groups = [(label, idx) for label, idx in groups if idx]
+    sent = []
+    try:
+        with Mailbox(**MAIL) as mb:
+            for n, (label, idx) in enumerate(groups):
+                fname = (f"transporturi_Toll_RO_{now:%Y-%m-%d_%H%M}.pdf" if label == "Toll_RO"
+                         else f"transporturi_{now:%Y-%m-%d_%H%M}.pdf")
+                pdf = merge([(path / f"{i}.pdf").read_bytes() for i in idx])
+                lines = [f"- {items[i].get('order_no') or names[i]}"
+                         + (f" · {items[i]['summary']}" if items[i].get("summary") else "") for i in idx]
+                subject = (f"Comenzi {label} - {len(idx)} "
+                           f"{'comandă' if len(idx) == 1 else 'comenzi'} - {now:%d.%m.%Y %H:%M}")
+                text = (f"{len(idx)} {'comandă' if len(idx) == 1 else 'comenzi'} {label}, gata de printat "
+                        f"(detaliile x2 + termenii și condițiile):\n\n" + "\n".join(lines)
+                        + "\n\nTrimis de Cirforvest.")
+                # Toll_RO primul; restul cu o secundă mai târziu, ca ordinea din Inbox să fie clară.
+                mb.deliver_to_inbox(MAIL["user"], subject, text, [(fname, pdf)], when=now.timestamp() + n)
+                sent.append(f"{subject} ({fname})")
+    except Exception as e:
+        return render_template("message.html", title="Nu am putut trimite pe mail",
+                               text=(f"Trimise: {'; '.join(sent)}. " if sent else "") + _friendly_error(e),
+                               back=url_for("review", token=token))
+    return render_template("message.html", title="Trimis pe mail",
+                           text=f"Am pus {len(sent)} {'mail' if len(sent) == 1 else 'mailuri'} în Inbox la "
+                                f"{MAIL['user']}: " + "; ".join(sent) + ".",
+                           back=url_for("review", token=token))
 
 
 def _record_download(uids, message_ids):

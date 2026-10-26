@@ -51,6 +51,10 @@ Mailurile deja descărcate sunt marcate, iar cele noi sunt bifate automat.
 Înainte de descărcare vezi o pagină de verificare: miniaturile fiecărui document
 (apasă pe una ca s-o vezi mare), numele fișierului luat din numărul comenzii
 (îl poți modifica) și o avertizare dacă un PDF nu are 6 pagini.
+Butonul **Trimite pe mail** pune în Inbox-ul contului conectat două mailuri cu PDF-urile
+gata de printat: întâi comenzile cu Toll_RO (dacă există), apoi restul. Serverul gratuit
+Render nu poate trimite mailuri (SMTP blocat), așa că mailurile sunt adăugate direct prin
+IMAP în Inbox — merge doar pentru adresa contului conectat.
 Butonul **Excel** descarcă un registru cu detaliile comenzilor citite de pe prima
 pagină (format DSV „Comanda Transport”): nr. comandă, date, locuri de încărcare și
 descărcare, marfă, greutate, LDM, preț, nr. camion, referințe — cu total pe monedă.
