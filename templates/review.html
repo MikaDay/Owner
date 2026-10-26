@@ -6,6 +6,7 @@
 </div>
 <p class="muted">Verifică miniaturile și numele fișierelor. Apasă pe o pagină ca s-o vezi mare.</p>
 
+{% for line in info %}<p class="muted small" style="margin:0">{{ line }}</p>{% endfor %}
 {% for p in problems %}<p class="warn" style="margin:0">{{ p }}</p>{% endfor %}
 
 <form method="post" action="{{ url_for('export', token=token) }}" id="exp">
@@ -18,6 +19,7 @@
         <input type="checkbox" name="use_{{ i }}" value="1" checked data-toll="{{ 1 if title == 'Cu Toll_RO' else 0 }}" aria-label="Include {{ it.name }}">
         <input type="text" name="name_{{ i }}" value="{{ it.name }}" autocapitalize="off" spellcheck="false" aria-label="Nume fișier">
       </div>
+      {% if it.note %}<div class="warn">{{ it.note }}</div>{% endif %}
       {% if it.summary %}<div class="route">{{ it.summary }}</div>{% endif %}
       <div class="src"><a href="{{ url_for('job_original', token=token, i=i) }}" target="_blank">{{ it.source }}</a> · {{ it.total }} pag. → {{ it.pages|join(", ") }}{% if not it.order_no %} · nr. comandă negăsit{% endif %}</div>
       {% if it.total != expected %}

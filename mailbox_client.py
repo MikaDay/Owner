@@ -6,13 +6,22 @@ mesajul complet se descarcă doar pentru mailurile alese.
 
 import email
 import imaplib
+import json
 import re
-from datetime import date, timedelta
+import time
+from datetime import date, datetime, timedelta, timezone
+from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
 
 from fetch_mail import _MONTHS, _decode, _safe_name
 
 _HEADERS = "BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE MESSAGE-ID CONTENT-TYPE)]"
+
+# Memoria aplicației stă în căsuța de mail (serverul gratuit își pierde fișierele la repornire):
+# folderul „Cirforvest” conține un singur mesaj cu ce s-a descărcat și când.
+STATE_FOLDER = "Cirforvest"
+STATE_SUBJECT = "Cirforvest - jurnal descarcari (nu sterge)"
+STATE_KEEP_DAYS = 180
 
 
 class Mailbox:
@@ -89,6 +98,57 @@ class Mailbox:
             return
         self.imap.select(f'"{self.folder}"', readonly=False)
         self.imap.uid("STORE", ",".join(uids), "+FLAGS", "(\\Seen)")
+
+    def _select(self, folder, readonly=True):
+        typ, data = self.imap.select(f'"{folder}"', readonly=readonly)
+        return typ == "OK"
+
+    def load_state(self):
+        """{"last_download": datetime|None, "downloaded": {message_id: iso_data}} din folderul Cirforvest."""
+        state = {"last_download": None, "downloaded": {}}
+        try:
+            if not self._select(STATE_FOLDER):
+                return state                     # încă nu s-a descărcat nimic de pe site
+            typ, data = self.imap.uid("SEARCH", None, "ALL")
+            uids = data[0].split() if typ == "OK" and data and data[0] else []
+            if uids:
+                typ, data = self.imap.uid("FETCH", uids[-1], "(BODY.PEEK[])")
+                if typ == "OK" and data and isinstance(data[0], tuple):
+                    body = email.message_from_bytes(data[0][1]).get_payload(decode=True) or b"{}"
+                    raw = json.loads(body.decode("utf-8"))
+                    last = raw.get("last_download")
+                    state = {"last_download": datetime.fromisoformat(last) if last else None,
+                             "downloaded": dict(raw.get("downloaded") or {})}
+        finally:
+            self._select(self.folder)
+        return state
+
+    def save_download(self, message_ids, when=None):
+        """Adaugă comenzile descărcate acum în jurnal și ține minte momentul descărcării."""
+        when = when or datetime.now(timezone.utc)
+        state = self.load_state()
+        cutoff = (when - timedelta(days=STATE_KEEP_DAYS)).isoformat()
+        downloaded = {k: v for k, v in state["downloaded"].items() if v >= cutoff}
+        downloaded.update({mid: when.isoformat() for mid in message_ids if mid})
+        msg = EmailMessage()
+        msg["Subject"] = STATE_SUBJECT
+        msg["From"] = "Cirforvest <noreply@cirforvest.local>"
+        msg.set_content(json.dumps({"last_download": when.isoformat(), "downloaded": downloaded}, indent=1))
+        self.imap.create(f'"{STATE_FOLDER}"')        # „există deja” e un răspuns normal
+        typ, data = self.imap.append(f'"{STATE_FOLDER}"', "(\\Seen)", imaplib.Time2Internaldate(time.time()),
+                                     msg.as_bytes())
+        if typ != "OK":
+            raise RuntimeError(f"Nu pot salva jurnalul în folderul {STATE_FOLDER}: {data}")
+        try:
+            # Păstrează doar ultimul mesaj-jurnal.
+            if self._select(STATE_FOLDER, readonly=False):
+                typ, data = self.imap.uid("SEARCH", None, "ALL")
+                old = data[0].split()[:-1] if typ == "OK" and data and data[0] else []
+                if old:
+                    self.imap.uid("STORE", b",".join(old), "+FLAGS", "(\\Deleted)")
+                    self.imap.expunge()
+        finally:
+            self._select(self.folder)
 
     def pdf_attachments(self, uid):
         """[(nume_fisier, bytes)] pentru toate PDF-urile din mailul `uid`."""
