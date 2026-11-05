@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Se pregătește · Cirforvest{% endblock %}
+{% block body %}
+<div><div class="label">Cirforvest</div><h1 id="phase">Se pregătesc comenzile…</h1></div>
+<div class="prog" role="progressbar" aria-labelledby="phase" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" id="bar">
+  <div class="fill" id="fill"></div>
+</div>
+<p class="muted" id="count" aria-live="polite">Se conectează la mail…</p>
+<p class="muted small">Poți lăsa telefonul. Când e gata, se deschide singură pagina de verificare.</p>
+<p class="err" id="err" hidden>Nu mai primesc răspuns de la server. Verifică internetul; pagina reîncearcă singură.</p>
+<script>
+(() => {
+  const url = "{{ url_for('status', token=token) }}";
+  const $ = (id) => document.getElementById(id);
+  let fails = 0;
+  async function poll() {
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      const st = await r.json();
+      fails = 0; $("err").hidden = true;
+      if (st.next) { location.replace(st.next); return; }
+      $("phase").textContent = st.phase || "Se pregătesc comenzile…";
+      if (st.total) {
+        // Bară determinată: arată exact câte comenzi sunt gata.
+        $("bar").classList.remove("indet");
+        $("bar").setAttribute("aria-valuemax", st.total);
+        $("bar").setAttribute("aria-valuenow", st.done);
+        $("fill").style.width = Math.round(100 * st.done / st.total) + "%";
+        $("count").textContent = st.done < st.total ? `Comanda ${st.done + 1} din ${st.total}` : `Gata: ${st.total} din ${st.total}`;
+      } else {
+        $("bar").classList.add("indet");
+      }
+    } catch (e) {
+      if (++fails >= 5) $("err").hidden = false;
+    }
+    setTimeout(poll, 1000);
+  }
+  $("bar").classList.add("indet");
+  poll();
+})();
+</script>
+{% endblock %}

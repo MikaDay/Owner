@@ -4,12 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Cirforvest">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f3f4f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141917" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="{{ url_for('manifest') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}">
 <title>{% block title %}Cirforvest{% endblock %}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root {
-  --bg: #f3f4f1; --surface: #fff; --fg: #1d2421; --muted: #5f6a65; --line: #d7dbd6;
+  --bg: #f3f4f1; --surface: #fff; --fg: #1d2421; --muted: #5f6a65; --line: #d7dbd6; --seg-bg: #e3e5e0; --seg-on: #fff;
   --accent: #e0a100; --accent-ink: #1d2421; --tc: #3f6e86; --ok: #2f7d4f; --err: #b3362b;
   --warn: #9a5b00; --warn-bg: #fdf1d6; --paper: #fff; --shade: rgba(20,25,23,.82);
   --body: "Archivo", -apple-system, "Segoe UI", sans-serif;
@@ -17,45 +24,59 @@
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #141917; --surface: #1d2321; --fg: #e8ece9; --muted: #9aa5a0; --line: #333b38;
+  :root { --bg: #141917; --surface: #1d2321; --fg: #e8ece9; --muted: #9aa5a0; --line: #333b38; --seg-bg: #262d2a; --seg-on: #3b4440;
           --accent: #f0b52a; --accent-ink: #141917; --tc: #7fb0c8; --ok: #5fbf85; --err: #ec6f63;
           --warn: #f0c060; --warn-bg: #3a2f17; --paper: #f4f4f2; --shade: rgba(0,0,0,.85); color-scheme: dark; }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.45; }
+/* Dynamic Type: pe iPhone, mărimea textului urmează Setări → Afișaj → Mărimea textului
+   (17 pt implicit). Toate mărimile sunt în rem, deci se scalează împreună. */
+html { font: -apple-system-body; }
+@supports not (font: -apple-system-body) { html { font-size: 100%; } }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 1rem; line-height: 1.45;
+  -webkit-text-size-adjust: 100%; }
 .wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;
   padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 120px max(16px, env(safe-area-inset-left)); }
 h1 { font-weight: 800; font-size: 1.6rem; line-height: 1.1; margin: 0; letter-spacing: -0.01em; }
 .label { font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 .top { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; }
-.top a { color: var(--muted); font-size: 0.85rem; }
+/* Legături mici („Ieși”, „Înapoi”) cu zonă de apăsare de 44 pt, fără să schimbe aspectul. */
+.top a { color: var(--muted); font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px;
+  padding: 0 10px; margin: -12px -10px -12px 0; }
 .muted { color: var(--muted); margin: 0; }
 form.search { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 form.search label { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; color: var(--muted); min-width: 0; }
 form.search .wide { grid-column: span 3; }
 input[type=text], input[type=number], input[type=password] {
-  font: inherit; font-size: 16px; color: var(--fg); background: var(--surface);
+  font: inherit; font-size: max(16px, 1rem); color: var(--fg); background: var(--surface); min-height: 44px;
   border: 1px solid var(--line); border-radius: 6px; padding: 10px; width: 100%; }
-button, .btn { font: inherit; font-weight: 700; cursor: pointer; border-radius: 8px; padding: 12px 16px;
+button, .btn { font: inherit; font-weight: 700; cursor: pointer; border-radius: 8px; padding: 12px 16px; min-height: 44px;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   border: 1.5px solid var(--fg); background: transparent; color: var(--fg); text-decoration: none; text-align: center; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 button:disabled { opacity: .45; }
-button:focus-visible, input:focus-visible { outline: 3px solid var(--tc); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--tc); outline-offset: 2px; }
+button:active:not(:disabled), .btn:active, .newbtn:active { transform: scale(0.98); }
+@media (prefers-reduced-motion: no-preference) { button, .btn, .newbtn { transition: transform .08s; } }
 .err { color: var(--err); }
 .list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
 .row { display: grid; grid-template-columns: 28px 1fr; gap: 2px 10px; padding: 12px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
 .row input { grid-row: span 2; width: 22px; height: 22px; accent-color: var(--accent); margin: 2px 0 0; }
 .row .subj { font-weight: 700; overflow-wrap: anywhere; min-width: 0; }
 .row .meta { font-family: var(--mono); font-size: 0.76rem; color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
-.badge { display: inline-block; font-family: var(--mono); font-size: 0.68rem; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--ok); color: var(--ok); margin-left: 6px; vertical-align: 1px; }
+.badge { display: inline-block; font-family: var(--mono); font-size: 0.72rem; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--ok); color: var(--ok); margin-left: 6px; vertical-align: 1px; }
 .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line);
   padding: 12px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 .bar .in { max-width: 640px; margin: 0 auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .bar .count { flex: 1 1 100%; font-size: 0.85rem; color: var(--muted); }
 .bar button { flex: 1 1 0; white-space: nowrap; padding: 12px 10px; }
 .bar button.primary { flex-grow: 1.6; }
-.tools { display: flex; gap: 14px; font-size: 0.88rem; }
-.tools button { padding: 0; border: 0; color: var(--tc); font-weight: 500; }
+/* Comutator cu segmente, ca în iOS: Toate / Necitite / Niciunul. */
+.seg { display: flex; padding: 2px; border-radius: 9px; background: var(--seg-bg); width: 100%; }
+.seg button { flex: 1; min-height: 40px; padding: 6px 8px; border: 0; border-radius: 7px; background: transparent;
+  color: var(--fg); font-weight: 600; font-size: 0.88rem; position: relative; }
+.seg button::after { content: ""; position: absolute; inset: -2px 0; }   /* zona de apăsare: 44 pt */
+.seg button[aria-pressed="true"] { background: var(--seg-on); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
 .pages { display: flex; gap: 5px; align-items: center; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); flex-wrap: wrap; }
 .pg { width: 22px; height: 30px; border-radius: 3px; display: grid; place-items: center; border: 1.5px solid var(--tc); color: var(--tc); }
 .pg.tr { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -66,8 +87,11 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--tc); outlin
 .pick small { color: var(--muted); }
 .pick.busy { border-color: var(--accent); border-style: solid; }
 #pdf { position: absolute; width: 1px; height: 1px; opacity: 0; }
+/* Pe telefon nu ai unde să tragi fișiere: chenarul devine un buton obișnuit. */
+@media (pointer: coarse) { .pick { border-style: solid; border-width: 1.5px; padding: 18px 16px; } .pick .drag-hint { display: none; } }
 #pdf:focus-visible + .pick { outline: 3px solid var(--tc); outline-offset: 2px; }
 .small { font-size: 0.88rem; }
+.vh { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; opacity: 0; }
 .newbtn { display: flex; flex-direction: column; gap: 4px; padding: 18px; border-radius: 10px; text-decoration: none;
   background: var(--accent); color: var(--accent-ink); }
 .newbtn strong { font-size: 1.25rem; }
@@ -80,14 +104,18 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--tc); outlin
 code { font-family: var(--mono); font-size: 0.85em; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
 .copy { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 .copy code { flex: 1; min-width: 0; padding: 8px; }
-.copy button { padding: 8px 12px; font-size: 0.9rem; }
+.copy button { padding: 8px 12px; font-size: 0.9rem; min-height: 44px; }
+details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
 a.cta { display: block; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); text-decoration: none; }
 a.cta b { color: var(--tc); }
 .doc { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-bottom: 1px solid var(--line); min-width: 0; }
 .doc .head { display: flex; gap: 10px; align-items: center; }
-.doc .head input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+.doc .head input[type=checkbox] { width: 24px; height: 24px; accent-color: var(--accent); flex: none; margin: 0; }
+/* Căsuța de bifat are în jur o zonă de apăsare de 44×44 pt. */
+.doc .head .chk { display: grid; place-items: center; width: 44px; height: 44px; margin-left: -10px; flex: none; cursor: pointer; }
 .doc .head input[type=text] { font-weight: 700; }
 .doc .route { font-size: 0.92rem; }
+.doc .src a { display: inline-flex; align-items: center; min-height: 44px; margin: -14px 0; color: var(--tc); }
 .doc .src { font-family: var(--mono); font-size: 0.74rem; color: var(--muted); overflow-wrap: anywhere; }
 .warn { background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 8px 10px; font-size: 0.88rem; }
 .thumbs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
@@ -100,7 +128,9 @@ a.cta b { color: var(--tc); }
 .viewer[hidden] { display: none; }
 .viewer canvas { max-width: 100%; max-height: calc(100% - 60px); background: var(--paper); border-radius: 3px; }
 .viewer .vbar { display: flex; gap: 10px; align-items: center; color: #fff; font-family: var(--mono); font-size: 0.85rem; white-space: nowrap; }
-.viewer button { color: #fff; border-color: #fff; padding: 8px 14px; }
+.viewer button { color: #fff; border-color: #fff; padding: 8px 14px; min-width: 44px; min-height: 44px; }
+.viewer canvas { touch-action: none; transform-origin: center center; height: auto; max-height: none; }
+.viewer .vhint { color: #fff; opacity: .7; font-size: 0.8rem; }
 .startform { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .startform label { font-size: 0.92rem; }
 .startform .row2 { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -111,6 +141,22 @@ h2.group span { font-family: var(--mono); font-size: 0.75rem; color: var(--muted
 .savedbox #savedlinks { display: flex; flex-direction: column; gap: 8px; }
 .savedbox .btn { overflow-wrap: anywhere; font-size: 0.92rem; }
 .savedbox button { color: var(--fg); border-color: var(--fg); }
+.prog { height: 8px; border-radius: 4px; background: var(--seg-bg); overflow: hidden; }
+.prog .fill { height: 100%; width: 0; background: var(--accent); border-radius: 4px; }
+@media (prefers-reduced-motion: no-preference) {
+  .prog .fill { transition: width .4s ease-out; }
+  .prog.indet .fill { width: 30% !important; animation: indet 1.2s ease-in-out infinite; }
+  @keyframes indet { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+}
+@media (prefers-reduced-motion: reduce) { .prog.indet .fill { width: 100% !important; opacity: .35; } }
+.sheet-back { position: fixed; inset: 0; z-index: 25; background: rgba(0,0,0,.4); display: flex; align-items: flex-end; justify-content: center; }
+.sheet-back[hidden] { display: none; }
+.sheet { background: var(--surface); color: var(--fg); width: min(640px, 100%); border-radius: 14px 14px 0 0;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 20px max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.sheet strong { font-size: 1.15rem; }
+.sheet p { margin: 0; }
+@media (prefers-reduced-motion: no-preference) { .sheet { animation: up .2s ease-out; } @keyframes up { from { transform: translateY(40px); opacity: 0; } } }
 .wait { position: fixed; inset: 0; z-index: 30; background: rgba(20, 25, 23, 0.9); color: #fff; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 24px; }
 .wait[hidden] { display: none; }

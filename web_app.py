@@ -14,6 +14,7 @@ import re
 import secrets
 import shutil
 import tempfile
+import threading
 import time
 import zipfile
 from datetime import date, datetime
@@ -81,6 +82,24 @@ def login_required(view):
             return redirect(url_for("login"))
         return view(*a, **kw)
     return wrapper
+
+
+@app.route("/manifest.webmanifest")
+def manifest():
+    """Descrierea aplicației pentru „Adaugă pe ecranul principal” (iconiță, deschidere fără bara browserului)."""
+    data = {
+        "name": "Cirforvest", "short_name": "Cirforvest", "lang": "ro",
+        "description": "Comenzile de transport DSV, gata de printat.",
+        "start_url": "/", "scope": "/", "display": "standalone",
+        "background_color": "#f3f4f1", "theme_color": "#f3f4f1",
+        "icons": [
+            {"src": url_for("static", filename="icon-192.png"), "sizes": "192x192", "type": "image/png"},
+            {"src": url_for("static", filename="icon-512.png"), "sizes": "512x512", "type": "image/png"},
+            {"src": url_for("static", filename="icon-512.png"), "sizes": "512x512", "type": "image/png",
+             "purpose": "maskable"},
+        ],
+    }
+    return app.response_class(json.dumps(data), mimetype="application/manifest+json")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -153,17 +172,18 @@ def _job(token):
 @app.route("/prepare", methods=["POST"])
 @login_required
 def prepare():
-    """Descarcă și procesează mailurile bifate, apoi arată pagina de verificare."""
+    """Descarcă și procesează mailurile bifate în fundal; pagina de progres arată „comanda 7 din 14”."""
     uids = request.form.getlist("uid")
     if not uids:
         return redirect(request.referrer or url_for("index"))
     labels = {u: (request.form.get(f"subj_{u}", u), request.form.get(f"mid_{u}", "")) for u in uids}
-    try:
+
+    def work(path):
         with Mailbox(**MAIL) as mb:
-            token, problems = _job_from_mail(mb, labels)
-    except Exception as e:
-        return render_template("message.html", title="Nu m-am putut conecta la mail", text=_friendly_error(e))
-    return _job_response(token, problems, "Mailurile alese nu au PDF-uri.")
+            _, problems = _job_from_mail(mb, labels, path=path)
+        return problems, "Mailurile alese nu au PDF-uri.", {}
+
+    return redirect(url_for("progress", token=_start_job(work, "Se pregătesc comenzile…")))
 
 
 @app.route("/noi/start", methods=["POST"])
@@ -189,15 +209,17 @@ def new_orders_start():
 @app.route("/noi")
 @login_required
 def new_orders():
-    """Un singur pas: comenzile de descărcat → pagina de verificare.
+    """Un singur pas: comenzile de descărcat → pagina de verificare (în fundal, cu progres).
 
     Necitite + cele deschise în mail dar probabil sărite (vezi new_orders.pick_new),
     fără cele descărcate deja de pe site."""
     if not (MAIL["user"] and MAIL["password"]):
         return redirect(url_for("index"))
-    info = []
-    try:
+
+    def work(path):
+        info = []
         with Mailbox(**MAIL) as mb:
+            _set_status(path, phase="Se caută comenzile noi în mail…")
             try:
                 state = mb.load_state()
             except Exception as e:
@@ -207,33 +229,110 @@ def new_orders():
             last = state["last_download"]
             info.insert(0, f"Ultima descărcare de pe site: {when(last)}." if last else
                         "Prima descărcare de pe site: iau comenzile necitite și pe cele dintre ele.")
+            nothing = {"title": "Nicio comandă nouă", "start_form": True,
+                       "last_date": last.astimezone(RO).date().isoformat() if last else ""}
             found = mb.list_messages(days=NEW_ORDERS_DAYS, sender=DEFAULT_FROM, subject=DEFAULT_SUBJECT)
             picked = pick_new(found, state)
             if not picked:
-                return render_template("message.html", title="Nicio comandă nouă",
-                                       text=f"{info[0]} Nu există comenzi necitite sau nedescărcate "
-                                            f"în ultimele {NEW_ORDERS_DAYS} de zile.",
-                                       back=url_for("index"), start_form=True,
-                                       last_date=(last.astimezone(RO).date() if last else None))
+                return [], (f"{info[0]} Nu există comenzi necitite sau nedescărcate "
+                            f"în ultimele {NEW_ORDERS_DAYS} de zile."), nothing
             labels = {m["uid"]: (m["subject"], m["message_id"], describe(reason, last)) for m, reason in picked}
-            token, problems = _job_from_mail(mb, labels, orders_only=True, info=info)
-    except Exception as e:
-        return render_template("message.html", title="Nu m-am putut conecta la mail", text=_friendly_error(e))
-    if not token:
-        return render_template("message.html", title="Nicio comandă nouă",
-                               text=f"{info[0]} Nu sunt comenzi noi de descărcat. " + " ".join(problems),
-                               back=url_for("index"))
-    return _job_response(token, problems, "")
+            _, problems = _job_from_mail(mb, labels, orders_only=True, info=info, path=path)
+        return problems, f"{info[0]} Nu sunt comenzi noi de descărcat.", nothing
+
+    return redirect(url_for("progress", token=_start_job(work, "Se caută comenzile noi în mail…")))
 
 
-def _job_from_mail(mb, labels, orders_only=False, info=None):
+# --- Pregătiri în fundal, cu progres ------------------------------------------------------------
+# Citirea mailului și procesarea PDF-urilor durează (zeci de secunde pe serverul gratuit). Rulează
+# într-un fir separat; starea stă în status.json lângă pregătire, ca orice proces al serverului s-o
+# poată citi, iar pagina de progres o întreabă din secundă în secundă.
+
+def _set_status(path, **fields):
+    f = path / "status.json"
+    try:
+        status = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        status = {}
+    status.update(fields)
+    tmp = path / "status.tmp"
+    tmp.write_text(json.dumps(status), encoding="utf-8")
+    tmp.replace(f)
+
+
+def _start_job(work, phase):
+    """work(path) → (probleme, text_dacă_nu_iese_nimic, opțiuni pentru pagina de mesaj)."""
+    path = _jobs_dir() / secrets.token_hex(16)
+    path.mkdir()
+    _set_status(path, state="running", phase=phase, done=0, total=0)
+
+    def run():
+        try:
+            problems, empty_text, extra = work(path)
+            if (path / "job.json").exists():
+                _set_status(path, state="done")
+            else:
+                _set_status(path, **{"title": "Niciun PDF procesat", **extra, "state": "empty",
+                                     "text": " ".join([empty_text, *problems]).strip()})
+        except Exception as e:
+            app.logger.exception("Pregătirea a eșuat")
+            _set_status(path, state="error", title="Nu m-am putut conecta la mail", text=_friendly_error(e))
+
+    threading.Thread(target=run, daemon=True).start()
+    return path.name
+
+
+def _status_path(token):
+    if not re.fullmatch(r"[0-9a-f]{32}", token or ""):
+        abort(404)
+    path = _jobs_dir() / token
+    if not (path / "status.json").exists():
+        abort(404)
+    return path
+
+
+@app.route("/progres/<token>")
+@login_required
+def progress(token):
+    _status_path(token)
+    return render_template("progress.html", token=token)
+
+
+@app.route("/status/<token>")
+@login_required
+def status(token):
+    path = _status_path(token)
+    st = json.loads((path / "status.json").read_text(encoding="utf-8"))
+    if st.get("state") == "done":
+        st["next"] = url_for("review", token=token)
+    elif st.get("state") in ("empty", "error"):
+        st["next"] = url_for("result", token=token)
+    return st
+
+
+@app.route("/rezultat/<token>")
+@login_required
+def result(token):
+    st = json.loads((_status_path(token) / "status.json").read_text(encoding="utf-8"))
+    last = st.get("last_date")
+    return render_template("message.html", title=st.get("title", ""), text=st.get("text", ""),
+                           back=url_for("index"), start_form=st.get("start_form"),
+                           last_date=date.fromisoformat(last) if last else None)
+
+
+def _job_from_mail(mb, labels, orders_only=False, info=None, path=None):
     """labels: {uid: (subiect, message_id[, notă])} → (token, probleme).
 
     Cu orders_only, PDF-urile care nu sunt comenzi de transport (facturi, situații…)
     sunt sărite — comanda se recunoaște după conținut, nu după subiectul mailului."""
-    path, items, problems = _new_job()
+    if path is None:
+        path, items, problems = _new_job()
+    else:
+        items, problems = [], []
     skipped = 0
-    for uid, (subj, mid, *note) in labels.items():
+    total = len(labels)
+    for n, (uid, (subj, mid, *note)) in enumerate(labels.items()):
+        _set_status(path, phase="Se pregătesc comenzile…", done=n, total=total)
         pdfs = mb.pdf_attachments(uid)
         if not pdfs and not orders_only:
             problems.append(f"Mailul „{subj}” nu are PDF atașat.")
@@ -244,6 +343,7 @@ def _job_from_mail(mb, labels, orders_only=False, info=None):
                                note=note[0] if note else "")
         if orders_only and not added:
             skipped += 1
+    _set_status(path, done=total, total=total)
     if skipped:
         problems.append(f"Am sărit {skipped} mailuri care nu conțin o comandă de transport "
                         "(rămân necitite în mail).")
@@ -352,7 +452,8 @@ def _summary(d):
 def _save_job(path, items, problems, info=None):
     """Salvează pregătirea și întoarce token-ul ei, sau None dacă nu s-a procesat nimic."""
     if not items:
-        shutil.rmtree(path, ignore_errors=True)
+        if not (path / "status.json").exists():      # pregătirile în fundal își păstrează starea
+            shutil.rmtree(path, ignore_errors=True)
         return None
     (path / "job.json").write_text(json.dumps({"items": items, "problems": problems, "info": info or []}),
                                    encoding="utf-8")
@@ -377,7 +478,7 @@ def review(token):
     ) if docs]
     return render_template("review.html", token=token, items=job["items"], groups=groups,
                            grouped=len(groups) > 1, problems=job["problems"], info=job.get("info") or [],
-                           mail_ready=bool(MAIL["user"] and MAIL["password"]),
+                           mail_ready=bool(MAIL["user"] and MAIL["password"]), mail_user=MAIL["user"],
                            expected=EXPECTED_PAGES)
 
 

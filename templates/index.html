@@ -22,7 +22,7 @@
   <input type="file" name="pdf" id="pdf" accept="application/pdf,.pdf" multiple>
   <label for="pdf" class="pick" id="pick">
     <strong>Încarcă PDF-uri</strong>
-    <small id="pickhint">Din Fișiere, iCloud Drive sau salvate din Mail. Poți alege mai multe deodată.</small>
+    <small id="pickhint">Din Fișiere, iCloud Drive sau salvate din Mail. Poți alege mai multe deodată<span class="drag-hint"> sau le poți trage aici</span>.</small>
   </label>
 </form>
 <a class="cta small" href="{{ url_for('shortcut_help') }}">Primești multe PDF-uri pe iPhone? <b>Trimite-le din Mail cu o apăsare →</b></a>
@@ -44,9 +44,11 @@
 {% if searched and not error %}
   {% if messages %}
   <form method="post" action="{{ url_for('prepare') }}" id="dl">
-    <div class="top">
-      <p class="muted">{{ messages|length }} mailuri găsite. Cele necitite sunt deja bifate.</p>
-      <div class="tools"><button type="button" data-sel="all">Toate</button><button type="button" data-sel="new">Doar noi</button><button type="button" data-sel="none">Niciunul</button></div>
+    <p class="muted">{{ messages|length }} mailuri găsite. Cele necitite și nedescărcate sunt deja bifate.</p>
+    <div class="seg" role="group" aria-label="Selectează">
+      <button type="button" data-sel="all" aria-pressed="false">Toate</button>
+      <button type="button" data-sel="new" aria-pressed="false">Necitite</button>
+      <button type="button" data-sel="none" aria-pressed="false">Niciunul</button>
     </div>
     <div class="list">
     {% for m in messages %}
@@ -94,10 +96,15 @@
   const boxes = [...form.querySelectorAll('input[name=uid]')];
   const count = document.getElementById("count");
   const btns = form.querySelectorAll(".bar button");
+  const segs = [...form.querySelectorAll("[data-sel]")];
   const update = () => {
     const n = boxes.filter(b => b.checked).length;
     count.textContent = n ? `${n} mailuri selectate` : "Bifează mailurile de descărcat";
     btns.forEach(b => b.disabled = !n);
+    // Segmentul activ arată ce e bifat acum (niciunul activ dacă bifezi de mână altceva).
+    const isNew = boxes.every(b => b.checked === (b.dataset.new === "1"));
+    const state = n === boxes.length ? "all" : n === 0 ? "none" : isNew ? "new" : "";
+    segs.forEach(s => s.setAttribute("aria-pressed", String(s.dataset.sel === state)));
   };
   form.addEventListener("change", update);
   form.querySelectorAll("[data-sel]").forEach(b => b.onclick = () => {

@@ -16,7 +16,7 @@
   {% for i, it in docs %}
     <div class="doc">
       <div class="head">
-        <input type="checkbox" name="use_{{ i }}" value="1" checked data-toll="{{ 1 if title == 'Cu Toll_RO' else 0 }}" aria-label="Include {{ it.name }}">
+        <label class="chk"><input type="checkbox" name="use_{{ i }}" value="1" checked data-toll="{{ 1 if title == 'Cu Toll_RO' else 0 }}" aria-label="Include {{ it.name }}"></label>
         <input type="text" name="name_{{ i }}" value="{{ it.name }}" autocapitalize="off" spellcheck="false" aria-label="Nume fișier">
       </div>
       {% if it.note %}<div class="warn">{{ it.note }}</div>{% endif %}
@@ -39,6 +39,16 @@
   </div></div>
 </form>
 
+<div class="sheet-back" id="confirm" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="confirmtitle">
+    <strong id="confirmtitle">Trimit pe mail?</strong>
+    <p id="confirmtext" class="muted"></p>
+    <small class="muted">Comenzile vor fi notate ca descărcate și marcate ca citite în Yahoo.</small>
+    <button type="button" class="primary" id="confirmok">Trimite</button>
+    <button type="button" id="confirmno">Anulează</button>
+  </div>
+</div>
+
 <div class="viewer" id="viewer" hidden role="dialog" aria-label="Previzualizare pagină">
   <canvas id="big"></canvas>
   <div class="vbar">
@@ -47,6 +57,7 @@
     <button type="button" id="next" aria-label="Pagina următoare">›</button>
     <button type="button" id="close">Închide</button>
   </div>
+  <div class="vhint" id="vhint">Glisează pentru altă pagină · ciupește pentru mărire · trage în jos ca să închizi</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -55,9 +66,9 @@
   pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   const $ = (id) => document.getElementById(id);
 
-  async function renderPage(pdf, n, canvas, cssWidth) {
+  async function renderPage(pdf, n, canvas, cssWidth, sharpness = 1) {
     const page = await pdf.getPage(n);
-    const scale = cssWidth * (window.devicePixelRatio || 1) / page.getViewport({ scale: 1 }).width;
+    const scale = cssWidth * (window.devicePixelRatio || 1) * sharpness / page.getViewport({ scale: 1 }).width;
     const vp = page.getViewport({ scale });
     canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
     await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
@@ -67,17 +78,75 @@
   async function show() {
     $("vlabel").textContent = `${vPos} / ${vPdf.numPages} · p. ${vPages[vPos - 1]}`;
     $("prev").disabled = vPos === 1; $("next").disabled = vPos === vPdf.numPages;
-    await renderPage(vPdf, vPos, $("big"), Math.min(window.innerWidth - 32, 900));
+    resetZoom();
+    const w = Math.min(window.innerWidth - 32, 900);
+    // Randare la rezoluție dublă, ca textul să rămână clar și după mărire.
+    await renderPage(vPdf, vPos, big, w, Math.min(2, 3000 / (w * (window.devicePixelRatio || 1))));
+    // Pagina întreagă pe ecran: lățimea e limitată și de înălțimea disponibilă.
+    big.style.width = Math.min(w, (window.innerHeight - 170) * big.width / big.height) + "px";
   }
-  $("prev").onclick = () => { vPos--; show(); };
-  $("next").onclick = () => { vPos++; show(); };
-  $("close").onclick = () => { $("viewer").hidden = true; };
-  $("viewer").onclick = (e) => { if (e.target.id === "viewer") $("viewer").hidden = true; };
+  const go = (d) => { const n = vPos + d; if (vPdf && n >= 1 && n <= vPdf.numPages) { vPos = n; show(); } };
+  const closeViewer = () => { $("viewer").hidden = true; resetZoom(); };
+  $("prev").onclick = () => go(-1);
+  $("next").onclick = () => go(1);
+  $("close").onclick = closeViewer;
+
+  // Gesturi ca în Fotografii/Fișiere: glisare stânga/dreapta = altă pagină, glisare în jos = închide,
+  // ciupire sau dublu-tap = mărire, iar când e mărită pagina se mută cu degetul.
+  const big = $("big");
+  const pts = new Map();
+  let zoom = 1, tx = 0, ty = 0, start = null, lastTap = 0;
+  const apply = (anim) => {
+    big.style.transition = anim && !matchMedia("(prefers-reduced-motion: reduce)").matches ? "transform .2s" : "none";
+    big.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+  };
+  function resetZoom() { zoom = 1; tx = ty = 0; big.style.opacity = 1; apply(false); }
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  big.addEventListener("pointerdown", (e) => {
+    big.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    start = { x: e.clientX, y: e.clientY, tx, ty, zoom, d: pts.size === 2 ? dist() : 0, multi: pts.size > 1 };
+  });
+  big.addEventListener("pointermove", (e) => {
+    if (!pts.has(e.pointerId) || !start) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2 && start.d) {                       // ciupire
+      zoom = Math.min(4, Math.max(1, start.zoom * dist() / start.d));
+      if (zoom === 1) { tx = ty = 0; }
+    } else if (pts.size === 1 && !start.multi) {
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (zoom > 1) { tx = start.tx + dx; ty = start.ty + dy; }          // mutare pagină mărită
+      else { tx = dx; ty = Math.max(0, dy); big.style.opacity = 1 - Math.min(0.5, ty / 400); }
+    }
+    apply(false);
+  });
+  const end = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if (pts.size || !start) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (zoom === 1 && !start.multi) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {          // tap: dublu-tap mărește
+        const now = Date.now();
+        if (now - lastTap < 300) { zoom = 2.5; lastTap = 0; apply(true); start = null; return; }
+        lastTap = now;
+      } else if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) { go(dx < 0 ? 1 : -1); start = null; return; }
+      else if (dy > 90 && dy > Math.abs(dx)) { closeViewer(); start = null; return; }
+      tx = ty = 0; big.style.opacity = 1; apply(true);
+    } else if (zoom > 1 && !start.multi && Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+      const now = Date.now();
+      if (now - lastTap < 300) { lastTap = 0; resetZoom(); apply(true); } else lastTap = now;
+    }
+    start = null;
+  };
+  big.addEventListener("pointerup", end);
+  big.addEventListener("pointercancel", end);
+  $("viewer").onclick = (e) => { if (e.target.id === "viewer") closeViewer(); };
   document.addEventListener("keydown", (e) => {
     if ($("viewer").hidden) return;
-    if (e.key === "Escape") $("viewer").hidden = true;
-    if (e.key === "ArrowLeft" && vPos > 1) $("prev").click();
-    if (e.key === "ArrowRight" && vPdf && vPos < vPdf.numPages) $("next").click();
+    if (e.key === "Escape") closeViewer();
+    if (e.key === "ArrowLeft") go(-1);
+    if (e.key === "ArrowRight") go(1);
   });
 
   // Thumbnails show the processed PDF itself, so what you see is exactly what gets printed.
@@ -115,12 +184,36 @@
 
   // „Trimite pe mail” încarcă o pagină nouă: ecran de așteptare și fără a doua trimitere.
   // ZIP și Excel sunt descărcări (pagina rămâne), deci fără ecran de așteptare.
+  // Întâi o confirmare (acțiunea schimbă lucruri în Yahoo), apoi ecranul de așteptare.
   const mailBtn = form.querySelector('button[value="mail"]');
+  const sheet = $("confirm");
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   if (mailBtn) mailBtn.addEventListener("click", (e) => {
-    if (form.dataset.sent) { e.preventDefault(); return; }
-    form.dataset.sent = "1";
-    showWait("Se trimit PDF-urile pe mail…");
+    if (form.dataset.confirmed) return;            // al doilea pas: trimiterea propriu-zisă
+    e.preventDefault();
+    if (form.dataset.sent) return;
+    const picked = boxes.filter((b) => b.checked);
+    const toll = picked.filter((b) => b.dataset.toll === "1").length, rest = picked.length - toll;
+    $("confirmtext").textContent = [
+      toll ? `Mailul 1: ${plural(toll, "comandă", "comenzi")} cu Toll_RO.` : "",
+      rest ? `Mailul ${toll ? 2 : 1}: ${plural(rest, "comandă", "comenzi")} fără Toll_RO.` : "",
+      `Destinatar: {{ mail_user }}.`,
+    ].filter(Boolean).join(" ");
+    sheet.hidden = false;
+    $("confirmok").focus();
   });
+  const closeSheet = () => { sheet.hidden = true; mailBtn?.focus(); };
+  $("confirmno").onclick = closeSheet;
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) closeSheet(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !sheet.hidden) closeSheet(); });
+  $("confirmok").onclick = () => {
+    sheet.hidden = true;
+    form.dataset.confirmed = form.dataset.sent = "1";
+    showWait("Se trimit PDF-urile pe mail…");
+    if (form.requestSubmit) form.requestSubmit(mailBtn);
+    else { const h = document.createElement("input"); h.type = "hidden"; h.name = "mode"; h.value = "mail"; form.append(h); form.submit(); }
+  };
+  window.addEventListener("pageshow", () => { delete form.dataset.confirmed; delete form.dataset.sent; });
 })();
 </script>
 {% endblock %}

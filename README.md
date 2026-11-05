@@ -51,6 +51,11 @@ Mailurile deja descărcate sunt marcate, iar cele noi sunt bifate automat.
 Înainte de descărcare vezi o pagină de verificare: miniaturile fiecărui document
 (apasă pe una ca s-o vezi mare), numele fișierului luat din numărul comenzii
 (îl poți modifica) și o avertizare dacă un PDF nu are 6 pagini.
+Pe iPhone/Android site-ul se adaugă pe ecranul principal ca o aplicație (iconiță proprie,
+fără bara browserului). „Comenzi noi” și „Pregătește” rulează în fundal, cu progres
+„comanda 7 din 14”; în vizualizatorul de pagini se glisează între pagini, se ciupește pentru
+mărire și se trage în jos pentru închidere.
+
 Butonul **Trimite pe mail** pune în Inbox-ul contului conectat două mailuri cu PDF-urile
 gata de printat: întâi comenzile cu Toll_RO (dacă există), apoi restul. Serverul gratuit
 Render nu poate trimite mailuri (SMTP blocat), așa că mailurile sunt adăugate direct prin

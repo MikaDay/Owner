@@ -2,9 +2,11 @@
 {% block body %}
 <div><div class="label">Comandă transport · PDF</div><h1>Cirforvest</h1></div>
 <form method="post" style="display:flex;flex-direction:column;gap:12px">
+  {# Câmp de utilizator ascuns vizual: fără el, iPhone (Keychain) nu oferă salvarea parolei. #}
+  <input type="text" name="username" value="Cirforvest" autocomplete="username" class="vh" tabindex="-1" aria-hidden="true" readonly>
   <label for="password" class="muted">Parola site-ului</label>
-  <input type="password" id="password" name="password" autocomplete="current-password" autofocus>
-  {% if error %}<p class="err" style="margin:0">{{ error }}</p>{% endif %}
+  <input type="password" id="password" name="password" autocomplete="current-password" enterkeyhint="go" autofocus>
+  {% if error %}<p class="err" style="margin:0" role="alert">{{ error }}</p>{% endif %}
   <button class="primary" type="submit">Intră</button>
 </form>
 {% endblock %}
