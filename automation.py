@@ -35,14 +35,34 @@ def settings(raw):
     return {**DEFAULTS, **(raw.get("settings") or {})}
 
 
-def vapid():
-    return os.environ.get("VAPID_PRIVATE_KEY", ""), os.environ.get("VAPID_PUBLIC_KEY", "")
+def vapid(raw=None):
+    """(cheie privată, cheie publică) VAPID: din variabilele de mediu sau, dacă lipsesc, din jurnal
+    (generate de server la prima nevoie, vezi ensure_vapid)."""
+    env = os.environ.get("VAPID_PRIVATE_KEY", ""), os.environ.get("VAPID_PUBLIC_KEY", "")
+    if all(env):
+        return env
+    keys = (raw or {}).get("vapid") or {}
+    return keys.get("private", ""), keys.get("public", "")
+
+
+def ensure_vapid(raw):
+    """Cheia publică VAPID; dacă nu există nicăieri, serverul o generează acum și o salvează în jurnal."""
+    private, public = vapid(raw)
+    if private and public:
+        return public
+
+    def change(r):
+        if not (r.get("vapid") or {}).get("public"):
+            private, public = webpush.generate_vapid_keys()
+            r = {**r, "vapid": {"private": private, "public": public}}
+        return r
+    return journal.update(change)["vapid"]["public"]
 
 
 def push_all(raw, message, sender=webpush.send):
     """Trimite notificarea pe toate telefoanele abonate; abonamentele moarte se șterg.
     Întoarce (câte au primit, endpoint-uri de șters)."""
-    private, public = vapid()
+    private, public = vapid(raw)
     if not (private and public):
         return 0, []
     ok, gone = 0, []

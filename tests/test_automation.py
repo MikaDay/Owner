@@ -108,9 +108,15 @@ def test_cron_endpoint_token_and_throttle(client, server, pushes, monkeypatch):
     assert anon.post("/cron/tick?sync=1", headers={"X-Cron-Token": "secret"}).get_data(as_text=True) == "prea devreme\n"
 
 
-def test_settings_page_and_service_worker(client):
+def test_settings_page_and_service_worker(client, server, monkeypatch):
+    monkeypatch.delenv("VAPID_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("VAPID_PUBLIC_KEY", raising=False)
     html = client.get("/setari").get_data(as_text=True)
     assert "Notificări pe acest telefon" in html and "Trimite automat" in html
+    keys = journal_of(server)["vapid"]                              # generate de server, o singură dată
+    assert keys["public"] in html and keys["private"] not in html
+    client.get("/setari")
+    assert journal_of(server)["vapid"] == keys
     r = web_app.app.test_client().get("/sw.js")
     assert r.status_code == 200 and r.headers["Service-Worker-Allowed"] == "/" and b"showNotification" in r.data
     assert web_app.app.test_client().get("/ping").data == b"ok\n"

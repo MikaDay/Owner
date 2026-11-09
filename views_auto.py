@@ -120,8 +120,14 @@ def settings():
                                    back=url_for("settings"))
         return redirect(url_for("settings", salvat=1))
     raw, error = _read_raw()
+    vapid_public = ""
+    if not error:
+        try:
+            vapid_public = automation.ensure_vapid(raw)
+        except Exception as e:
+            error = _friendly_error(e)
     return render_template("settings.html", cfg=automation.settings(raw), error=error,
-                           devices=len(raw.get("push") or []), vapid_public=automation.vapid()[1],
+                           devices=len(raw.get("push") or []), vapid_public=vapid_public,
                            saved=request.args.get("salvat"), cron=raw.get("cron") or {}, tab="setari",
                            **settings_extra(raw))
 
