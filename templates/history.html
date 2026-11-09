@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Istoric · Cirforvest{% endblock %}
+{% block body %}
+<div class="top">
+  <div><div class="label">Registru</div><h1>Istoric trimiteri</h1></div>
+  <a href="{{ url_for('orders') }}">Comenzi</a>
+</div>
+{% if not sends %}<p class="muted">Încă nu s-a trimis nimic pe mail de pe site.</p>{% endif %}
+<div class="list">
+{% for s in sends %}
+  <div class="orow">
+    <div class="t"><b>{{ s.at[8:10] }}.{{ s.at[5:7] }}.{{ s.at[:4] }} {{ s.at[11:16] }} UTC</b>
+      <span>{{ s.orders|length }} {{ 'comandă' if s.orders|length == 1 else 'comenzi' }}{% if s.toll %} · {{ s.toll }} Toll_RO{% endif %}{% if s.user %} · {{ s.user }}{% endif %}</span></div>
+    <div class="chips">{% for no in s.orders %}<a class="chip" href="{{ url_for('order', no=no) }}">{{ no }}</a>{% endfor %}</div>
+    {% if s.orders %}<a class="btn" href="{{ url_for('search', nr=s.orders|join(',')) }}">Pregătește din nou</a>{% endif %}
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

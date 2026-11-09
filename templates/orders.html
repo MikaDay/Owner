@@ -3,6 +3,7 @@
 {% block body %}
 <div class="top">
   <div><div class="label">Registru</div><h1>Comenzi</h1></div>
+  <a href="{{ url_for('history') }}">Istoric</a>
 </div>
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
 
@@ -40,7 +41,8 @@
     </form>
   </div>
 {% elif not rows %}
-  <p class="muted">{% if q %}Nicio comandă pentru „{{ q }}”.{% else %}Nimic de făcut: toate comenzile au ePOD-ul complet, documentele trimise și plata încasată.{% endif %}</p>
+  <p class="muted">{% if q %}Nicio comandă pentru „{{ q }}” în registru.
+    <a class="btn" style="display:block;margin-top:8px" href="{{ url_for('search', nr=q) }}">Caută „{{ q }}” în mail</a>{% else %}Nimic de făcut: toate comenzile au ePOD-ul complet, documentele trimise și plata încasată.{% endif %}</p>
 {% endif %}
 
 <div class="list">
@@ -60,6 +62,11 @@
 </div>
 
 {% if not empty %}
+<section class="section">
+  <h2>Calendar</h2>
+  <p class="muted small" style="margin:0">Încărcările, descărcările și termenele pentru documente, în calendarul telefonului. Se actualizează singur.</p>
+  <a class="btn" href="{{ calendar_url.replace('https://', 'webcal://').replace('http://', 'webcal://') }}">Abonează-te în Calendar</a>
+</section>
 <details class="muted small">
   <summary>Adaugă comenzi mai vechi din mail</summary>
   <form method="post" action="{{ url_for('orders_import') }}" class="inline" id="importform2">

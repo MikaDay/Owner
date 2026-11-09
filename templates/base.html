@@ -29,6 +29,7 @@
           --warn: #f0c060; --warn-bg: #3a2f17; --paper: #f4f4f2; --shade: rgba(0,0,0,.85); color-scheme: dark; }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 /* Dynamic Type: pe iPhone, mărimea textului urmează Setări → Afișaj → Mărimea textului
    (17 pt implicit). Toate mărimile sunt în rem, deci se scalează împreună. */
 html { font: -apple-system-body; }
@@ -99,6 +100,8 @@ button:active:not(:disabled), .btn:active, .newbtn:active { transform: scale(0.9
 .newbtn { display: flex; flex-direction: column; gap: 4px; padding: 18px; border-radius: 10px; text-decoration: none;
   background: var(--accent); color: var(--accent-ink); }
 .newbtn strong { font-size: 1.25rem; }
+.count-badge { display: inline-grid; place-items: center; min-width: 1.6em; height: 1.6em; padding: 0 .4em; margin-left: 6px;
+  border-radius: .8em; background: var(--accent-ink); color: var(--accent); font-size: 0.8em; vertical-align: 0.1em; }
 .newbtn small { font-size: 0.88rem; opacity: .85; }
 .newbtn.busy { opacity: .7; pointer-events: none; }
 .newbtn:focus-visible { outline: 3px solid var(--tc); outline-offset: 2px; }

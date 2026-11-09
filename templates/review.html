@@ -20,7 +20,9 @@
         <label class="chk"><input type="checkbox" name="use_{{ i }}" value="1" {{ '' if it.skip else 'checked' }} data-toll="{{ 1 if title == 'Cu Toll_RO' else 0 }}" aria-label="Include {{ it.name }}"></label>
         <input type="text" name="name_{{ i }}" value="{{ it.name }}" autocapitalize="off" spellcheck="false" aria-label="Nume fișier">
       </div>
+      {% if it.urgent %}<div class="chips"><span class="chip late">{{ it.urgent }}</span></div>{% endif %}
       {% if it.flag %}<div class="{{ 'flag-changed' if it.flag[0] == 'changed' else 'warn' }}">{{ it.flag[1] }}</div>{% endif %}
+      {% if it.parse_warn %}<div class="warn">{{ it.parse_warn }}</div>{% endif %}
       {% if it.note %}<div class="warn">{{ it.note }}</div>{% endif %}
       {% if it.summary %}<div class="route">{{ it.summary }}</div>{% endif %}
       <div class="src"><a href="{{ url_for('job_original', token=token, i=i) }}" target="_blank">{{ it.source }}</a> · {{ it.total }} pag. → {{ it.pages|join(", ") }}{% if not it.order_no %} · nr. comandă negăsit{% endif %}</div>
@@ -28,10 +30,18 @@
       <div class="warn">Atenție: are {{ it.total }} pagini, nu {{ expected }}. Verifică miniaturile înainte să printezi.</div>
       {% endif %}
       <div class="thumbs" data-src="{{ url_for('job_file', token=token, i=i) }}" data-pages="{{ it.pages|join(',') }}"></div>
+      <div class="inline">
+        <button type="button" class="driver" data-url="{{ url_for('driver_sheet', token=token, i=i) }}"
+                data-name="{{ it.name }} - sofer.pdf">Trimite șoferului</button>
+        {% if it.order_no and session.get('ok') %}<a class="btn" href="{{ url_for('order', no=it.order_no) }}">Detalii</a>{% endif %}
+      </div>
     </div>
   {% endfor %}
   </div>
   {% endfor %}
+  <div class="inline" style="margin-top:6px">
+    <button name="mode" value="trucks" class="small">PDF pe camion (ZIP)</button>
+  </div>
   <div class="bar"><div class="in">
     <span class="count" id="count"></span>
     {% if mail_ready %}<button class="primary" name="mode" value="mail">Trimite pe mail</button>
@@ -183,6 +193,21 @@
   };
   form.addEventListener("change", update);
   update();
+
+  // Fișa șoferului: meniul de partajare al telefonului (WhatsApp, Mesaje…) cu paginile de detalii.
+  document.querySelectorAll("button.driver").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      const blob = await (await fetch(b.dataset.url)).blob();
+      const file = new File([blob], b.dataset.name, { type: "application/pdf" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: b.dataset.name });
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") return;      // omul a închis meniul de partajare
+    }
+    window.open(b.dataset.url, "_blank");             // fără partajare: deschide PDF-ul
+  }));
 
   // „Trimite pe mail” încarcă o pagină nouă: ecran de așteptare și fără a doua trimitere.
   // ZIP și Excel sunt descărcări (pagina rămâne), deci fără ecran de așteptare.

@@ -14,7 +14,7 @@ from mailbox_client import Mailbox
 from process_pdf import analyse
 from transport_order import build_register, is_transport_order, parse_order
 from web_app import (COPIES, DEFAULT_FROM, LAST, MAIL, _friendly_error, _set_status, _start_job, app,
-                     login_required)
+                     calendar_key, login_required)
 
 
 def _today():
@@ -82,7 +82,8 @@ def orders():
     rows.sort(key=lambda r: (not r[1]["late"], -(_day(r[0].get("loading_date")) or date.min).toordinal()))
     return render_template("orders.html", rows=rows, show=show, q=request.args.get("q", ""), error=error,
                            summary=registry.summary(raw, today), money=registry.money, route=_route,
-                           empty=not raw.get("orders"), tab="comenzi")
+                           empty=not raw.get("orders"), tab="comenzi",
+                           calendar_url=url_for("calendar", key=calendar_key(), _external=True))
 
 
 @app.route("/comanda/<no>", methods=["GET", "POST"])

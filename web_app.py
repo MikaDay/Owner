@@ -17,7 +17,7 @@ import tempfile
 import threading
 import time
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -315,6 +315,92 @@ def new_orders():
     return redirect(url_for("progress", token=_start_job(work, "Se caută comenzile noi în mail…")))
 
 
+@app.route("/cauta")
+@login_required
+def search():
+    """Caută una sau mai multe comenzi după număr (ex. „ARWY02628” sau „ARWY1, ARWY2”) în mailurile
+    din ultimul an și le pregătește din nou — și pe cele vechi, citite sau descărcate."""
+    numbers = [n.strip().upper() for n in re.split(r"[,\s;]+", request.args.get("nr", "")) if n.strip()][:30]
+    if not numbers:
+        return redirect(url_for("orders"))
+
+    def work(path):
+        with Mailbox(**MAIL) as mb:
+            _set_status(path, phase=f"Se caută {', '.join(numbers[:3])}{' …' if len(numbers) > 3 else ''} în mail…")
+            found = mb.list_messages(days=365, texts=numbers)
+            labels = {m["uid"]: (m["subject"], m["message_id"]) for m in found}
+            _, problems = _job_from_mail(mb, labels, orders_only=True, path=path, wanted=set(numbers))
+        return problems, f"Nu am găsit {', '.join(numbers)} în mailurile din ultimul an.", \
+            {"title": "Nu am găsit comanda", "back": url_for("orders")}
+
+    return redirect(url_for("progress", token=_start_job(work, "Se caută în mail…")))
+
+
+@app.route("/istoric")
+@login_required
+def history():
+    try:
+        sends = journal.read().get("sends") or []
+    except Exception as e:
+        return render_template("message.html", title="Nu am putut citi istoricul", text=_friendly_error(e))
+    return render_template("history.html", sends=sends, tab="comenzi")
+
+
+@app.route("/api/noi")
+@login_required
+def new_count():
+    """Câte mailuri ar lua acum „Comenzi noi” (fără să le deschidă) — pentru numărul de pe buton."""
+    if not (MAIL["user"] and MAIL["password"]):
+        return {"count": 0}
+    try:
+        with Mailbox(**MAIL) as mb:
+            state = state_from_journal(journal.read(mb=mb))
+            found = mb.list_messages(days=NEW_ORDERS_DAYS, sender=DEFAULT_FROM, subject=DEFAULT_SUBJECT)
+        return {"count": len(pick_new(found, state))}
+    except Exception as e:
+        return {"count": None, "error": _friendly_error(e)}, 503
+
+
+def calendar_key():
+    return hmac.new(str(app.secret_key).encode(), b"calendar", hashlib.sha256).hexdigest()[:32]
+
+
+@app.route("/calendar.ics")
+def calendar():
+    """Calendarul comenzilor (încărcări, descărcări, termene pentru documente). Se abonează din
+    telefon cu linkul care conține cheia — calendarul nu poate trimite parola site-ului."""
+    if not hmac.compare_digest(request.args.get("key", ""), calendar_key()):
+        abort(403)
+    try:
+        orders_ = list((journal.read().get("orders") or {}).values())
+    except Exception:
+        abort(503)
+
+    def esc(text):
+        return str(text).replace("\\", "\\\\").replace(",", "\\,").replace(";", "\\;").replace("\n", "\\n")
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Cirforvest//Comenzi//RO", "CALSCALE:GREGORIAN",
+             "X-WR-CALNAME:Cirforvest", "X-WR-TIMEZONE:Europe/Bucharest"]
+    for o in orders_:
+        no, truck = o.get("order_no"), o.get("truck") or ""
+        st = registry.status(o)
+        events = [("incarcare", _iso_day(o.get("loading_date")), f"Încărcare {no}", o.get("loading")),
+                  ("descarcare", _iso_day(o.get("unloading_date")), f"Descărcare {no}", o.get("unloading"))]
+        if not o.get("docs_sent") and st["deadline"]:
+            events.append(("documente", st["deadline"], f"Termen documente {no}", "Documentele originale trebuie să ajungă la DSV"))
+        for kind, day, title, where in events:
+            if not day:
+                continue
+            lines += ["BEGIN:VEVENT", f"UID:{no}-{kind}@cirforvest", f"DTSTAMP:{stamp}",
+                      f"DTSTART;VALUE=DATE:{day:%Y%m%d}", f"DTEND;VALUE=DATE:{day + timedelta(days=1):%Y%m%d}",
+                      f"SUMMARY:{esc(title + (' · ' + truck if truck else ''))}", f"LOCATION:{esc(where or '')}",
+                      f"DESCRIPTION:{esc(url_for('order', no=no, _external=True))}", "END:VEVENT"]
+    lines.append("END:VCALENDAR")
+    return app.response_class("\r\n".join(lines) + "\r\n", mimetype="text/calendar; charset=utf-8",
+                              headers={"Content-Disposition": "inline; filename=cirforvest.ics"})
+
+
 # --- Pregătiri în fundal, cu progres ------------------------------------------------------------
 # Citirea mailului și procesarea PDF-urilor durează (zeci de secunde pe serverul gratuit). Rulează
 # într-un fir separat; starea stă în status.json lângă pregătire, ca orice proces al serverului s-o
@@ -392,7 +478,7 @@ def result(token):
                            last_date=date.fromisoformat(last) if last else None)
 
 
-def _job_from_mail(mb, labels, orders_only=False, info=None, path=None):
+def _job_from_mail(mb, labels, orders_only=False, info=None, path=None, wanted=None):
     """labels: {uid: (subiect, message_id[, notă])} → (token, probleme).
 
     Cu orders_only, PDF-urile care nu sunt comenzi de transport (facturi, situații…)
@@ -401,7 +487,7 @@ def _job_from_mail(mb, labels, orders_only=False, info=None, path=None):
         path, items, problems = _new_job()
     else:
         items, problems = [], []
-    skipped = 0
+    skipped = []
     total = len(labels)
     for n, (uid, (subj, mid, *note)) in enumerate(labels.items()):
         _set_status(path, phase="Se pregătesc comenzile…", done=n, total=total)
@@ -412,13 +498,15 @@ def _job_from_mail(mb, labels, orders_only=False, info=None, path=None):
         added = 0
         for name, data in pdfs:
             added += _add_item(path, items, problems, name, data, mid, uid, orders_only=orders_only,
-                               note=note[0] if note else "")
-        if orders_only and not added:
-            skipped += 1
+                               note=note[0] if note else "", wanted=wanted)
+        if orders_only and not added and not wanted:
+            skipped.append(subj)
     _set_status(path, done=total, total=total)
     if skipped:
-        problems.append(f"Am sărit {skipped} mailuri care nu conțin o comandă de transport "
-                        "(rămân necitite în mail).")
+        listed = ", ".join(f"„{x}”" for x in skipped[:5]) + (" …" if len(skipped) > 5 else "")
+        problems.append(f"Am sărit {len(skipped)} {'mail' if len(skipped) == 1 else 'mailuri'} fără comandă de "
+                        f"transport recunoscută ({listed}); rămân necitite. Dacă e o comandă cu alt format, "
+                        "deschide-o din „Caută în mail”.")
     return _save_job(path, items, problems, info), problems
 
 
@@ -484,7 +572,7 @@ def _new_job():
     return path, [], []
 
 
-def _add_item(path, items, problems, name, data, message_id="", uid="", orders_only=False, note=""):
+def _add_item(path, items, problems, name, data, message_id="", uid="", orders_only=False, note="", wanted=None):
     """Procesează un PDF și îl adaugă în pregătire. Întoarce 1 dacă a fost adăugat."""
     try:
         r = analyse(data, COPIES, LAST, name)   # o singură citire a PDF-ului
@@ -497,6 +585,12 @@ def _add_item(path, items, problems, name, data, message_id="", uid="", orders_o
     out, pages = r["out"], r["pages"]
     details = parse_order(r["text"])
     number = details["order_no"]
+    if wanted and number not in wanted:
+        return 0
+    # Format necunoscut: o comandă din care nu putem citi ce contează trebuie verificată de om.
+    missing = [label for key, label in (("price", "prețul"), ("loading_date", "data încărcării"),
+                                        ("unloading", "locul descărcării"), ("truck", "camionul"))
+               if is_transport_order(r["text"]) and not details.get(key)]
     (path / f"{len(items)}.pdf").write_bytes(out)
     (path / f"{len(items)}.orig.pdf").write_bytes(data)
     items.append({
@@ -510,6 +604,9 @@ def _add_item(path, items, problems, name, data, message_id="", uid="", orders_o
         "message_id": message_id,
         "uid": uid,
         "note": note,
+        "detail": r["detail"],
+        "parse_warn": (f"Nu am putut citi din PDF: {', '.join(missing)}. Verifică comanda; poate DSV a schimbat "
+                       "formatul.") if missing else "",
     })
     return 1
 
@@ -588,7 +685,12 @@ def _job_response(token, problems, empty_text):
 @app.route("/review/<token>")
 def review(token):
     _, job = _job(token)
-    indexed = list(enumerate(job["items"]))
+    today = date.today()
+    for it in job["items"]:
+        d = _iso_day((it.get("details") or {}).get("loading_date"))
+        it["urgent"] = ({0: "Încărcare AZI", 1: "Încărcare mâine"}.get((d - today).days, "") if d else "")
+    # În fiecare grup: după data încărcării, apoi după camion — ordinea în care se și printează.
+    indexed = sorted(enumerate(job["items"]), key=lambda x: _print_key(x[1]))
     groups = [(title, docs) for title, docs in (
         ("Cu Toll_RO", [(i, it) for i, it in indexed if _is_toll(it)]),
         ("Fără Toll_RO", [(i, it) for i, it in indexed if not _is_toll(it)]),
@@ -597,6 +699,18 @@ def review(token):
                            grouped=len(groups) > 1, problems=job["problems"], info=job.get("info") or [],
                            mail_ready=bool(MAIL["user"] and MAIL["password"]), mail_user=MAIL["user"],
                            expected=EXPECTED_PAGES)
+
+
+def _iso_day(value):
+    try:
+        return date.fromisoformat(str(value)[:10]) if value else None
+    except ValueError:
+        return None
+
+
+def _print_key(item):
+    d = item.get("details") or {}
+    return (d.get("loading_date") or "9999", d.get("truck") or "", item.get("order_no") or "")
 
 
 def _is_toll(item):
@@ -610,6 +724,24 @@ def job_file(token, i):
     if not 0 <= i < len(job["items"]):
         abort(404)
     return send_file(path / f"{i}.pdf", mimetype="application/pdf")
+
+
+@app.route("/file/<token>/<int:i>/sofer.pdf")
+def driver_sheet(token, i):
+    """Fișa pentru șofer: doar paginile cu detaliile transportului, o singură dată (fără termeni)."""
+    path, job = _job(token)
+    if not 0 <= i < len(job["items"]) or not (path / f"{i}.orig.pdf").exists():
+        abort(404)
+    from pypdf import PdfReader, PdfWriter
+    reader = PdfReader(str(path / f"{i}.orig.pdf"))
+    writer = PdfWriter()
+    for k in range(max(1, job["items"][i].get("detail") or 1)):
+        writer.add_page(reader.pages[k])
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/pdf",
+                     download_name=f"{job['items'][i]['name']} - sofer.pdf")
 
 
 @app.route("/original/<token>/<int:i>.pdf")
@@ -638,7 +770,7 @@ def export(token):
     names = {i: safe_filename(request.form.get(f"name_{i}", "").strip() or items[i]["name"]) for i in chosen}
     # Doar trimiterea pe mail (sau, fără mail, PDF-ul de printat) notează comenzile ca descărcate:
     # un Excel sau un ZIP scos pentru evidență nu înseamnă că s-au printat.
-    if request.form.get("mode") not in ("mail", "xlsx", "zip"):
+    if request.form.get("mode") not in ("mail", "xlsx", "zip", "trucks"):
         _mark_downloaded([items[i]["message_id"] for i in chosen])
 
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
@@ -656,6 +788,17 @@ def export(token):
         return send_file(io.BytesIO(build_register(rows)), as_attachment=True,
                          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                          download_name=f"registru_transporturi_{stamp}.xlsx")
+    if request.form.get("mode") == "trucks":
+        by_truck = {}
+        for i in sorted(chosen, key=lambda i: _print_key(items[i])):
+            by_truck.setdefault((items[i].get("details") or {}).get("truck") or "fara_camion", []).append(i)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for truck, idx in by_truck.items():
+                z.writestr(f"{safe_filename(truck)}.pdf", merge([(path / f"{i}.pdf").read_bytes() for i in idx]))
+        buf.seek(0)
+        return send_file(buf, mimetype="application/zip", as_attachment=True,
+                         download_name=f"transporturi_pe_camion_{stamp}.zip")
     if request.form.get("mode") == "zip":
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -683,6 +826,7 @@ def export(token):
 def _send_by_mail(path, items, chosen, names, token):
     """„Trimite pe mail”: două mailuri în Inbox — întâi comenzile cu Toll_RO (dacă există), apoi restul."""
     now = datetime.now(RO)
+    chosen = sorted(chosen, key=lambda i: _print_key(items[i]))
     groups = [(label, [i for i in chosen if _is_toll(items[i]) == toll])
               for label, toll in (("Toll_RO", True), ("fără Toll_RO", False))]
     groups = [(label, idx) for label, idx in groups if idx]

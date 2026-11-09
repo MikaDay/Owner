@@ -59,18 +59,22 @@ class Mailbox:
         except Exception:
             pass
 
-    def list_messages(self, days=7, sender="", subject="", limit=300, unread_only=False):
-        """Mailurile (cele mai noi primele) care pot avea atașamente."""
+    def list_messages(self, days=7, sender="", subject="", limit=300, unread_only=False, texts=()):
+        """Mailurile (cele mai noi primele) care pot avea atașamente.
+        `texts`: caută mailurile care conțin oricare dintre texte (ex. numere de comandă)."""
         crit = ["UNSEEN"] if unread_only else []
         if days:
             d = date.today() - timedelta(days=days)
             crit += ["SINCE", f"{d.day:02d}-{_MONTHS[d.month - 1]}-{d.year}"]
         if sender:
             crit += ["FROM", f'"{sender}"']
-        typ, data = self.imap.uid("SEARCH", None, *(crit or ["ALL"]))
-        if typ != "OK":
-            raise RuntimeError(f"Căutarea a eșuat: {data}")
-        uids = data[0].split()[::-1][:limit]
+        found = set()
+        for extra in ([["TEXT", f'"{t}"'] for t in texts if re.fullmatch(r"[\w./-]{3,40}", t)] if texts else [[]]):
+            typ, data = self.imap.uid("SEARCH", None, *((crit + extra) or ["ALL"]))
+            if typ != "OK":
+                raise RuntimeError(f"Căutarea a eșuat: {data}")
+            found |= set(data[0].split())
+        uids = sorted(found, key=int)[::-1][:limit]
         if not uids:
             return []
 

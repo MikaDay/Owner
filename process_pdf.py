@@ -81,7 +81,7 @@ def analyse(data, first_page_copies=2, last_pages=3, name="PDF"):
         writer.add_page(reader.pages[i])
     out = io.BytesIO()
     writer.write(out)
-    return {"out": out.getvalue(), "pages": [i + 1 for i in order], "total": total,
+    return {"out": out.getvalue(), "pages": [i + 1 for i in order], "total": total, "detail": detail,
             "text": "\n".join(texts[i] for i in range(detail))}
 
 
