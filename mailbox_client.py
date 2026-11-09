@@ -241,6 +241,29 @@ class Mailbox:
         return {"subject": msg.get("Subject", ""), "from": msg.get("From", ""), "date": msg.get("Date", ""),
                 "text": text.strip(), "files": files}
 
+    def attachments(self, uid, exts):
+        """[(nume_fisier, bytes)] pentru atașamentele cu una din extensiile `exts` (ex. (".pdf", ".xlsx"))."""
+        typ, data = self.imap.uid("FETCH", str(uid).encode(), "(BODY.PEEK[])")
+        if typ != "OK" or not data or not isinstance(data[0], tuple):
+            return []
+        msg = email.message_from_bytes(data[0][1])
+        found = []
+        for part in msg.walk():
+            if part.get_content_maintype() == "multipart":
+                continue
+            filename = _decode(part.get_filename())
+            named = filename.lower().endswith(tuple(exts))
+            is_pdf = not named and part.get_content_type() == "application/pdf"
+            if not named and not (is_pdf and ".pdf" in exts):
+                continue
+            payload = part.get_payload(decode=True)
+            if payload:
+                name = _safe_name(filename or "atasament.pdf")
+                if is_pdf and not name.lower().endswith(".pdf"):
+                    name += ".pdf"
+                found.append((name, payload))
+        return found
+
     def pdf_attachments(self, uid):
         """[(nume_fisier, bytes)] pentru toate PDF-urile din mailul `uid`."""
         typ, data = self.imap.uid("FETCH", str(uid).encode(), "(BODY.PEEK[])")

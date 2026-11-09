@@ -20,11 +20,11 @@
 
 <section class="section">
   <h2>De unde știe aplicația</h2>
-  <p class="muted small" style="margin:0">Citește din mail <b>extrasele de cont BCR</b> (plățile DSV, cu facturile plătite), <b>situațiile DSV</b> și <b>desfășurătoarele RoToll</b>. Trimiteți-le pe mail la {{ mail_user }} (de exemplu extrasul lunar din George) și apasă „Verifică plățile” — sau o face singură în fiecare dimineață.</p>
+  <p class="muted small" style="margin:0">Citește din mail <b>extrasele de cont BCR</b> (plățile DSV, cu facturile plătite), <b>situațiile DSV</b> și <b>desfășurătoarele RoToll</b>, plus <b>rapoartele de plăți DSV</b> (Excel „RAPORT PLATI…”, din care păstrează doar rândurile CIRFORVEST). Trimiteți-le pe mail la {{ mail_user }} (de exemplu extrasul lunar din George) și apasă „Verifică plățile” — sau o face singură în fiecare dimineață.</p>
   <form method="post" action="{{ url_for('invoices_scan') }}" id="scanform" style="margin:0"><button class="primary" type="submit" style="width:100%">Verifică plățile acum</button></form>
   <form method="post" action="{{ url_for('invoices_upload') }}" enctype="multipart/form-data" class="inline" id="upform">
-    <input type="file" name="doc" id="doc" accept="application/pdf,.pdf" multiple class="vh">
-    <label for="doc" class="btn" style="flex:1">Încarcă un extras / o situație (PDF)</label>
+    <input type="file" name="doc" id="doc" accept="application/pdf,.pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple class="vh">
+    <label for="doc" class="btn" style="flex:1">Încarcă un document (PDF sau Excel)</label>
   </form>
   {% if orders_without %}<p class="muted small" style="margin:0">{{ orders_without }} comenzi din registru nu au încă factura legată — o alegi în pagina comenzii (aplicația propune după sumă și dată).</p>{% endif %}
 </section>
@@ -60,6 +60,7 @@
       {% else %}<span class="chip todo">Scadentă {{ pretty(i.due) if i.due else '—' }}</span>{% endif %}
       {% if i.order_no %}<a class="chip" href="{{ url_for('order', no=i.order_no) }}">{{ i.order_no }}{% if i.auto_linked %} (propusă){% endif %}</a>{% endif %}
       {% if i.paid_ref %}<span class="chip">ref. {{ i.paid_ref }}</span>{% endif %}
+      {% if i.storno %}<span class="chip late">Stornare DSV {{ money({i.currency or 'RON': i.storno}) }}</span>{% endif %}
     </div>
   </div>
 {% endfor %}

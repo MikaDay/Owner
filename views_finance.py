@@ -6,6 +6,7 @@ import os
 from datetime import date
 
 from flask import abort, redirect, render_template, request, send_file, session, url_for
+from openpyxl import load_workbook
 from pypdf import PdfReader
 
 import finance
@@ -24,6 +25,27 @@ def _pdf_text(data):
         return ""
 
 
+def _sheets(data):
+    """Rândurile din toate foile unui Excel (.xlsx), ca liste de valori."""
+    try:
+        wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    except Exception:
+        return []
+    try:
+        return [[list(r) for r in ws.iter_rows(values_only=True)] for ws in wb.worksheets]
+    finally:
+        wb.close()
+
+
+def read_document(name, data):
+    """(fel, conținut) pentru un atașament: PDF (extras, situație, RoToll) sau Excel (raport plăți DSV)."""
+    if name.lower().endswith(finance.SHEET_EXT):
+        sheets = _sheets(data)
+        return ("dsv_report", sheets) if finance.parse_dsv_report(sheets) else (None, None)
+    text = _pdf_text(data)
+    return finance.kind(text), text
+
+
 def scan_mail(path=None, days=SCAN_DAYS):
     """Caută în mail extrasele BCR, situațiile DSV și desfășurătoarele RoToll încă necitite de aplicație
     și le pune în jurnal. Întoarce lista rezumatelor (câte una pe document)."""
@@ -37,9 +59,8 @@ def scan_mail(path=None, days=SCAN_DAYS):
         for n, m in enumerate(todo):
             if path:
                 _set_status(path, phase="Se citesc extrasele și situațiile…", done=n, total=len(todo))
-            for name, data in mb.pdf_attachments(m["uid"]):
-                text = _pdf_text(data)
-                kind = finance.kind(text)
+            for name, data in mb.attachments(m["uid"], (".pdf",) + finance.SHEET_EXT):
+                kind, text = read_document(name, data)
                 if kind:
                     docs.append((kind, text, f"{name} ({m['subject']}, {m['date']:%d.%m.%Y})" if m["date"] else name))
         if path:
@@ -58,7 +79,16 @@ def describe(notes):
     bcr = [n for n in notes if n["kind"] == "bcr"]
     lists = [n for n in notes if n["kind"] == "dsv_list"]
     tolls = [n for n in notes if n["kind"] == "toll"]
+    reports = [n for n in notes if n["kind"] == "dsv_report"]
     parts = []
+    if reports:
+        pays, amount = sum(n["payments"] for n in reports), sum(n["amount"] for n in reports)
+        invs = sum(len(n["invoices"]) for n in reports)
+        stornos = sorted({s for n in reports for s in n.get("stornos") or []})
+        parts.append(f"{len(reports)} {'raport' if len(reports) == 1 else 'rapoarte'} de plăți DSV: {pays} "
+                     f"{'plată nouă' if pays == 1 else 'plăți noi'}" + (f" ({registry.money({'RON': amount})}, "
+                     f"{invs} facturi)" if pays else "")
+                     + (f"; stornări: {', '.join(stornos)}" if stornos else ""))
     if bcr:
         pays, amount = sum(n["payments"] for n in bcr), sum(n["amount"] for n in bcr)
         parts.append(f"{len(bcr)} {'extras' if len(bcr) == 1 else 'extrase'} BCR: {pays} plăți DSV noi"
@@ -145,14 +175,14 @@ def invoices_scan():
 @app.route("/facturi/incarca", methods=["POST"])
 @login_required
 def invoices_upload():
-    """Un extras, o situație DSV sau un desfășurător RoToll încărcat de mână (PDF)."""
+    """Un extras, o situație DSV, un desfășurător RoToll (PDF) sau un raport de plăți DSV (Excel), încărcat de mână."""
     notes, skipped = [], []
     try:
-        texts = [(f.filename, _pdf_text(f.read())) for f in request.files.getlist("doc") if f and f.filename]
+        docs = [(f.filename, *read_document(f.filename, f.read())) for f in request.files.getlist("doc")
+                if f and f.filename]
 
         def change(raw):
-            for name, text in texts:
-                kind = finance.kind(text)
+            for name, kind, text in docs:
                 if kind:
                     notes.append(finance.apply_document(raw, kind, text, f"{name} (încărcat)"))
                 else:

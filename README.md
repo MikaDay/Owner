@@ -22,6 +22,9 @@ Site: **https://cirforvest.onrender.com** (se adaugă pe ecranul principal al te
   mail. Căutare după număr (și în mailurile vechi), istoric trimiteri, calendar (abonare din telefon).
 - **Rapoarte**: pe luni, pe camion, prețuri pe traseu, sume de încasat/restante, întârzieri medii;
   registrul Excel pe orice perioadă și date pentru facturare (CSV, cu numărul comenzii pentru BT-10).
+- **Facturi**: plățile DSV din extrasele BCR și din rapoartele de plăți DSV (Excel „RAPORT PLATI…”, doar
+  rândurile CIRFORVEST, cu stornări), situațiile DSV (restante, lipsă la DSV), legătura factură ↔ comandă,
+  Toll_RO din desfășurătoarele RoToll, mesaj gata de trimis la DSV.
 - **Automat** (Setări): notificări pe telefon pentru comenzi noi, rezumatul zilei, trimiterea automată la
   ora aleasă, registrul lunar în Inbox pe 1 ale lunii, alertă dacă parola Yahoo nu mai merge.
 - **Conturi**: administrator + utilizatori cu parola lor, schimbarea parolei, cheie separată pentru

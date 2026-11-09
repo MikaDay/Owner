@@ -5,7 +5,9 @@ Trei feluri de documente (PDF, de obicei trimise pe mail de cineva din firmă):
   („Platitor: DSV ROAD SRL … Detalii: /ROC/DSV Invoice CIR2018/CIR2021///RFB/”);
 - **lista facturilor din situația DSV** (reconcilierea „Facturi CIRFORVEST – sortate…”): factură, dată,
   sumă, scadență, data plății; plus „Numere CIR care nu apar în situația DSV”;
-- **desfășurătorul RoToll** al unei curse: camion, început/sfârșit, de unde–până unde, taxa.
+- **desfășurătorul RoToll** al unei curse: camion, început/sfârșit, de unde–până unde, taxa;
+- **raportul de plăți DSV** („RAPORT PLATI 20.10.2026 EXPORT….xlsx”): câte un rând pe factură plătită,
+  cu numărul plății DSV; din el păstrăm doar rândurile CIRFORVEST (și stornările „ST CIR…”).
 
 Totul ajunge în jurnal: "invoices" {CIR…: …}, "payments" [...], "toll_trips" {serie: …}.
 Sumele facturilor sunt cu TVA (cum le plătește DSV); prețul comenzii e fără TVA.
@@ -141,11 +143,101 @@ def parse_toll(text):
 
 
 # Numele atașamentelor care merită deschise (restul mailurilor nu se descarcă deloc).
-DOC_NAMES = re.compile(r"extras|breakdown|desf[aă][sș]ur[aă]tor|factur|situa[tț]i|statement|sold", re.I)
+DOC_NAMES = re.compile(r"extras|breakdown|desf[aă][sș]ur[aă]tor|factur|situa[tț]i|statement|sold|raport|pl[aă][tț]i",
+                       re.I)
+SHEET_EXT = (".xlsx", ".xlsm")
 
 
 def worth_opening(names):
-    return any(n.lower().endswith(".pdf") and DOC_NAMES.search(n) for n in names)
+    return any(n.lower().endswith((".pdf",) + SHEET_EXT) and DOC_NAMES.search(n) for n in names)
+
+
+# --- Raportul de plăți DSV (Excel) ---------------------------------------------------------------
+
+REPORT_LINE = re.compile(r"^(ST\s*)?(CIR\d{3,6}R?)$")
+
+
+def _cell_text(v):
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return "" if v is None else str(v).strip()
+
+
+def _cell_num(v):
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    t = _cell_text(v)
+    if not re.fullmatch(r"-?[\d.,\s]+", t) or not re.search(r"\d", t):
+        return None
+    try:
+        return -_num(t) if t.startswith("-") else _num(t)
+    except ValueError:
+        return None
+
+
+def _cell_date(v):
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    t = _cell_text(v)
+    return _date(t[:10]) if re.fullmatch(r"\d{2}[./-]\d{2}[./-]\d{4}( .*)?", t) else None
+
+
+def parse_report_row(row):
+    """Un rând CIRFORVEST din raportul de plăți DSV, sau None.
+    Coloanele: furnizor, nume, factură, doc DSV, data facturii, sumă, monedă, …, data plății, nr. plată, …
+    Factura e cu minus (DSV o datorează); stornarea „ST CIR…” e cu plus (se scade din plată)."""
+    texts = [_cell_text(c) for c in row]
+    if not any("CIRFORVEST" in t.upper() for t in texts):
+        return None
+    cur = next((i for i, t in enumerate(texts) if t.upper() in ("RON", "EUR")), None)
+    if not cur:
+        return None
+    amount = _cell_num(row[cur - 1])
+    line = next((m for t in texts[:cur] for m in [REPORT_LINE.match(t.upper().replace("\u00a0", " "))] if m), None)
+    if amount is None or not line:
+        return None
+    after = list(row[cur + 1:])
+    k = next((i for i, c in enumerate(after) if _cell_date(c)), None)
+    if k is None:
+        return None
+    ref = next((t for t in map(_cell_text, after[k + 1:]) if re.fullmatch(r"\d{6,12}", t)), None)
+    if not ref:
+        return None
+    inv_date = next((d for d in reversed([_cell_date(c) for c in row[:cur]]) if d), None)
+    return {"no": line.group(2), "storno": bool(line.group(1)), "date": inv_date, "amount": amount,
+            "currency": texts[cur].upper(), "paid": _cell_date(after[k]), "ref": ref}
+
+
+def parse_dsv_report(sheets):
+    """Plățile DSV către CIRFORVEST din toate foile raportului: [{date, amount, invoices, ref, lines}]."""
+    payments = {}
+    for rows in sheets:
+        for row in rows:
+            r = parse_report_row(row or ())
+            if not r:
+                continue
+            p = payments.setdefault(r["ref"], {"date": r["paid"], "ref": r["ref"], "doc": "raport DSV",
+                                               "currency": r["currency"], "lines": {}})
+            p["lines"][(r["no"], r["storno"])] = r            # aceeași factură în două foi = un rând
+    out = []
+    for p in payments.values():
+        lines = sorted(p.pop("lines").values(), key=lambda r: (r["no"], r["storno"]))
+        p["lines"] = lines
+        p["amount"] = round(-sum(r["amount"] for r in lines), 2)
+        p["invoices"] = sorted({r["no"] for r in lines if not r["storno"]})
+        out.append(p)
+    return sorted(out, key=lambda p: (p["date"] or date.min, p["ref"]))
+
+
+def _same_payment(a, b):
+    """O plată văzută și în extrasul BCR, și în raportul DSV: aceeași sumă, la cel mult 5 zile."""
+    da, db = _day(a.get("date")), _day(b.get("date"))
+    return (abs((a.get("amount") or 0) - (b.get("amount") or 0)) < 0.01 and da and db
+            and abs((da - db).days) <= 5)
 
 
 # --- Aplicarea în jurnal -----------------------------------------------------------------------
@@ -170,7 +262,11 @@ def apply_document(raw, doc_kind, text, source=""):
         known = {(p.get("ref"), p.get("doc")) for p in payments}
         new = [p for p in parse_bcr(text) if (p["ref"], p["doc"]) not in known]
         for p in new:
-            payments.append({**{k: _iso(v) for k, v in p.items()}, "source": source})
+            twin = next((q for q in payments if q.get("doc") == "raport DSV" and _same_payment(q, p)), None)
+            if twin:
+                twin.update(bank_ref=p["ref"], invoices=sorted(set(twin.get("invoices") or []) | set(p["invoices"])))
+            else:
+                payments.append({**{k: _iso(v) for k, v in p.items()}, "source": source})
             for no in p["invoices"]:
                 inv = invoices.setdefault(no, {"no": no, "currency": "RON", "dsv_known": True})
                 if not inv.get("paid"):
@@ -188,6 +284,32 @@ def apply_document(raw, doc_kind, text, source=""):
         for no in missing:
             invoices.setdefault(no, {"no": no, "currency": "RON"})["dsv_known"] = False
         note.update(invoices=len(found), unpaid=sum(1 for i in found.values() if not i["paid"]), missing=len(missing))
+    elif doc_kind == "dsv_report":
+        payments = raw.setdefault("payments", [])
+        known = {p.get("ref") for p in payments if p.get("doc") == "raport DSV"} | {p.get("dsv_ref") for p in payments}
+        new = [p for p in parse_dsv_report(text) if p["ref"] not in known]
+        for p in new:
+            for r in p["lines"]:
+                inv = invoices.setdefault(r["no"], {"no": r["no"], "currency": r["currency"]})
+                inv["dsv_known"] = True
+                if r["storno"]:
+                    inv["storno"] = round(r["amount"], 2)
+                    continue
+                if inv.get("amount") is None:
+                    inv["amount"] = round(-r["amount"], 2)
+                if not inv.get("date") and r["date"]:
+                    inv["date"] = _iso(r["date"])
+                inv.update(paid=_iso(p["date"]), paid_ref=p["ref"], paid_by="raport plăți DSV")
+            entry = {"date": _iso(p["date"]), "amount": p["amount"], "invoices": p["invoices"], "ref": p["ref"],
+                     "doc": "raport DSV", "source": source}
+            twin = next((q for q in payments if q.get("doc") != "raport DSV" and _same_payment(q, entry)), None)
+            if twin:                                  # aceeași plată, deja văzută în extrasul BCR
+                twin.update(dsv_ref=p["ref"], invoices=sorted(set(twin.get("invoices") or []) | set(p["invoices"])))
+            else:
+                payments.append(entry)
+        stornos = sorted({r["no"] for p in new for r in p["lines"] if r["storno"]})
+        note.update(payments=len(new), amount=round(sum(p["amount"] for p in new), 2),
+                    invoices=sorted({no for p in new for no in p["invoices"]}), stornos=stornos)
     elif doc_kind == "toll":
         trip = parse_toll(text)
         if trip:
