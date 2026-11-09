@@ -7,3 +7,4 @@ __pycache__/
 .venv/
 downloaded.json
 .env
+.pytest_cache/

@@ -6,6 +6,7 @@
 </div>
 <p class="muted">Verifică miniaturile și numele fișierelor. Apasă pe o pagină ca s-o vezi mare.</p>
 
+{% if not session.get("ok") %}<p class="warn" style="margin:0">Ca să trimiți sau să descarci, <a href="{{ url_for('login', next=request.path) }}">intră în cont</a>.</p>{% endif %}
 {% for line in info %}<p class="muted small" style="margin:0">{{ line }}</p>{% endfor %}
 {% for p in problems %}<p class="warn" style="margin:0">{{ p }}</p>{% endfor %}
 

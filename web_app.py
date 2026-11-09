@@ -33,7 +33,7 @@ from transport_order import build_register, is_transport_order, parse_order
 
 app = Flask(__name__)
 # Render pune serverul în spatele unui proxy HTTPS; așa linkurile generate încep cu https://.
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 # Fără SECRET_KEY, cheia e derivată din parole, ca toate procesele serverului să o folosească pe aceeași.
 app.secret_key = os.environ.get("SECRET_KEY") or hashlib.sha256(
     ("transport:" + os.environ.get("SITE_PASSWORD", "") + os.environ.get("MAIL_PASSWORD", "")).encode()).hexdigest()
@@ -79,9 +79,68 @@ def login_required(view):
     @wraps(view)
     def wrapper(*a, **kw):
         if not session.get("ok"):
-            return redirect(url_for("login"))
+            # După intrare, înapoi unde era omul (pentru un POST: pagina de unde a venit).
+            back = request.full_path if request.method == "GET" else (request.referrer or "")
+            return redirect(url_for("login", next=_safe_next(back)))
         return view(*a, **kw)
     return wrapper
+
+
+def _safe_next(target):
+    """Doar adrese din site (fără „//alt-site” sau „https://…”), ca linkul de intrare să nu poată trimite în altă parte."""
+    if not target:
+        return None
+    if target.startswith(request.host_url):
+        target = "/" + target[len(request.host_url):]
+    target = target.rstrip("?")
+    return target if target.startswith("/") and not target.startswith("//") and "\\" not in target else None
+
+
+# --- Limita de încercări pentru parolă -----------------------------------------------------------
+# 5 parole greșite de la aceeași adresă în 15 minute → blocare 15 minute; peste 30 în total pe oră
+# → blocare pentru toți (cineva încearcă din mai multe locuri). Ținută într-un fișier, ca toate
+# procesele serverului s-o vadă.
+RATE_FILE = Path(tempfile.gettempdir()) / "cirforvest-login-attempts.json"
+RATE_IP, RATE_IP_WINDOW, RATE_ALL, RATE_ALL_WINDOW = 5, 15 * 60, 30, 60 * 60
+
+
+def _attempts(update=None):
+    import fcntl
+    with open(RATE_FILE, "a+", encoding="utf-8") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        try:
+            data = json.loads(f.read() or "[]")
+        except ValueError:
+            data = []
+        now = time.time()
+        data = [a for a in data if now - a[1] < RATE_ALL_WINDOW]
+        if update:
+            data.append(update)
+            f.seek(0)
+            f.truncate()
+            f.write(json.dumps(data))
+        return data
+
+
+def _client_ip():
+    return request.remote_addr or "?"
+
+
+def _login_blocked():
+    """Câte minute mai e blocată intrarea (0 = nu e blocată)."""
+    now, ip = time.time(), _client_ip()
+    data = _attempts()
+    mine = [t for a_ip, t in data if a_ip == ip and now - t < RATE_IP_WINDOW]
+    if len(mine) >= RATE_IP:
+        return max(1, round((RATE_IP_WINDOW - (now - mine[-RATE_IP])) / 60))
+    if len(data) >= RATE_ALL:
+        return max(1, round((RATE_ALL_WINDOW - (now - data[-RATE_ALL][1])) / 60))
+    return 0
+
+
+def _login_failed():
+    _attempts(update=[_client_ip(), time.time()])
 
 
 @app.route("/manifest.webmanifest")
@@ -108,13 +167,19 @@ def login():
         return render_template("message.html", title="Lipsește parola site-ului",
                                text="Setează variabila SITE_PASSWORD pe server, ca nimeni altcineva să nu-ți poată citi mailul.")
     error = ""
+    nxt = _safe_next(request.values.get("next", ""))
     if request.method == "POST":
-        if hmac.compare_digest(request.form.get("password", ""), SITE_PASSWORD):
+        wait = _login_blocked()
+        if wait:
+            error = f"Prea multe parole greșite. Încearcă din nou peste {wait} minute."
+        elif hmac.compare_digest(request.form.get("password", ""), SITE_PASSWORD):
             session.permanent = True
             session["ok"] = True
-            return redirect(url_for("index"))
-        error = "Parolă greșită."
-    return render_template("login.html", error=error)
+            return redirect(nxt or url_for("index"))
+        else:
+            _login_failed()
+            error = "Parolă greșită."
+    return render_template("login.html", error=error, next=nxt or "")
 
 
 @app.route("/logout")
@@ -368,7 +433,12 @@ def api_upload():
     Primește PDF-urile (orice nume de câmp) și parola site-ului în câmpul
     `password`; răspunde cu linkul paginii de verificare, ca text simplu."""
     given = request.form.get("password") or request.headers.get("X-Password", "")
+    wait = _login_blocked()
+    if wait:
+        return (f"Prea multe parole greșite. Încearcă din nou peste {wait} minute.", 429,
+                {"Content-Type": "text/plain; charset=utf-8"})
     if not SITE_PASSWORD or not hmac.compare_digest(given, SITE_PASSWORD):
+        _login_failed()
         return "Parolă greșită. Verifică parola din scurtătură.", 403, {"Content-Type": "text/plain; charset=utf-8"}
     uploads = [f for key in request.files for f in request.files.getlist(key) if f]
     if not uploads:
@@ -505,6 +575,7 @@ def job_original(token, i):
 
 
 @app.route("/export/<token>", methods=["POST"])
+@login_required
 def export(token):
     path, job = _job(token)
     items = job["items"]
@@ -518,8 +589,10 @@ def export(token):
     if not chosen:
         return redirect(url_for("review", token=token))
     names = {i: safe_filename(request.form.get(f"name_{i}", "").strip() or items[i]["name"]) for i in chosen}
-    _mark_downloaded([items[i]["message_id"] for i in chosen])
-    _record_download([items[i].get("uid") for i in chosen], [items[i]["message_id"] for i in chosen])
+    # Doar trimiterea pe mail (sau, fără mail, PDF-ul de printat) notează comenzile ca descărcate:
+    # un Excel sau un ZIP scos pentru evidență nu înseamnă că s-au printat.
+    if request.form.get("mode") not in ("mail", "xlsx", "zip"):
+        _mark_downloaded([items[i]["message_id"] for i in chosen])
 
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
     if request.form.get("mode") == "mail":
@@ -587,6 +660,8 @@ def _send_by_mail(path, items, chosen, names, token):
         return render_template("message.html", title="Nu am putut trimite pe mail",
                                text=(f"Trimise: {'; '.join(sent)}. " if sent else "") + _friendly_error(e),
                                back=url_for("review", token=token))
+    _mark_downloaded([items[i]["message_id"] for i in chosen])
+    _record_download([items[i].get("uid") for i in chosen], [items[i]["message_id"] for i in chosen])
     return render_template("message.html", title="Trimis pe mail",
                            text=f"Am pus {len(sent)} {'mail' if len(sent) == 1 else 'mailuri'} în Inbox la "
                                 f"{MAIL['user']}: " + "; ".join(sent) + ".",

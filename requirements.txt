@@ -1,4 +1,7 @@
-pypdf>=4.0
-flask>=3.0
-gunicorn>=22.0
-openpyxl>=3.1
+# Versiuni fixate: o versiune nouă a unei biblioteci nu mai poate strica serverul la o repornire.
+pypdf==6.17.0
+flask==3.1.3
+werkzeug==3.1.9
+gunicorn==26.2.0
+openpyxl==3.1.5
+cryptography==50.0.1

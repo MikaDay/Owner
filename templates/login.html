@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block body %}
 <div><div class="label">Comandă transport · PDF</div><h1>Cirforvest</h1></div>
-<form method="post" style="display:flex;flex-direction:column;gap:12px">
+<form method="post" action="{{ url_for('login') }}" style="display:flex;flex-direction:column;gap:12px">
+  <input type="hidden" name="next" value="{{ next }}">
   {# Câmp de utilizator ascuns vizual: fără el, iPhone (Keychain) nu oferă salvarea parolei. #}
   <input type="text" name="username" value="Cirforvest" autocomplete="username" class="vh" tabindex="-1" aria-hidden="true" readonly>
   <label for="password" class="muted">Parola site-ului</label>
