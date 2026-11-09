@@ -1,113 +1,78 @@
-# PDF-uri transport din mail
+# Cirforvest
 
-Aplicația descarcă PDF-urile primite pe mail și le reorganizează așa:
+Comenzile de transport DSV, de la mail la print și până la încasare.
 
-| Original (6 pagini) | Rezultat (5 pagini) |
+Site: **https://cirforvest.onrender.com** (se adaugă pe ecranul principal al telefonului ca o aplicație).
+
+## Ce face
+
+- **Comenzi noi** (un buton): ia din Yahoo comenzile de la expeditorul setat — necitite, primite după
+  ultima descărcare sau deschise printre cele necitite —, le recunoaște după conținut (nu după subiect),
+  le reorganizează (detaliile ×2 + termenii și condițiile; detaliile pot avea mai multe pagini) și deschide
+  pagina de verificare, cu progres „comanda 7 din 14”.
+- **Verificare**: miniaturi (glisare, ciupire pentru mărire), nume după numărul comenzii, comenzi cu
+  Toll_RO separate, încărcările de azi/mâine marcate, duplicate și comenzi **modificate de DSV** (cu ce
+  s-a schimbat), avertizare când PDF-ul pare în alt format.
+- **Trimite pe mail** (cu confirmare): două mailuri în Inbox — Toll_RO, apoi restul — sortate după data
+  încărcării. Comenzile intră în registru și devin citite. Alte ieșiri: ZIP, ZIP pe camion, Excel,
+  „Trimite șoferului” (doar detaliile, prin meniul de partajare).
+- **Registru (Comenzi)**: pentru fiecare comandă — ePOD (link + colectare/livrare/CMR), termenul pentru
+  documentele originale (5 zile lucrătoare, 10 internațional, cu sărbătorile legale), scadența plății
+  (45 de zile), încasarea, suma Toll_RO, notă, istoricul versiunilor. Comenzile mai vechi se pot aduce din
+  mail. Căutare după număr (și în mailurile vechi), istoric trimiteri, calendar (abonare din telefon).
+- **Rapoarte**: pe luni, pe camion, prețuri pe traseu, sume de încasat/restante, întârzieri medii;
+  registrul Excel pe orice perioadă și date pentru facturare (CSV, cu numărul comenzii pentru BT-10).
+- **Automat** (Setări): notificări pe telefon pentru comenzi noi, rezumatul zilei, trimiterea automată la
+  ora aleasă, registrul lunar în Inbox pe 1 ale lunii, alertă dacă parola Yahoo nu mai merge.
+- **Conturi**: administrator + utilizatori cu parola lor, schimbarea parolei, cheie separată pentru
+  scurtătura iPhone; limită de încercări la parolă.
+- **Telefon**: iPhone — scurtătura „Cirforvest” din meniul de partajare (pagina `/scurtatura`);
+  Android — Cirforvest apare singur în meniul „Distribuie” după „Instalează aplicația”.
+
+Memoria aplicației (registrul, ce s-a descărcat, setările, conturile, abonamentele la notificări) stă în
+contul Yahoo, în folderul **Cirforvest** — un singur mesaj-jurnal. **Nu șterge folderul și nici mesajul.**
+
+## Setări pe server (Render → Environment)
+
+| Variabilă | Ce e |
 |---|---|
-| 1 – detalii transport | 1 – detalii transport |
-| 2, 3 | 1 – detalii transport (copie) |
-| 4, 5, 6 – termeni și condiții | 4, 5, 6 – termeni și condiții |
+| `MAIL_SERVER`, `MAIL_USER`, `MAIL_PASSWORD` | contul de mail (Yahoo: `imap.mail.yahoo.com` + parola de aplicație) |
+| `SITE_PASSWORD` | parola administratorului (până o schimbi din Setări) |
+| `SECRET_KEY` | cheia sesiunilor (orice text lung, aleator) |
+| `FILTER_FROM` | expeditorul comenzilor (ex. `ilie.rumega@dsv.com`) |
+| `CRON_TOKEN` *(opțional)* | dacă e setat, verificarea periodică trebuie să-l trimită (pune același text în GitHub → Settings → Secrets → Actions → `CRON_TOKEN`) |
+| `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY` *(opțional)* | cheile pentru notificări; dacă lipsesc, serverul le generează singur |
+| `NEW_ORDERS_DAYS`, `EXPECTED_PAGES`, `FIRST_PAGE_COPIES`, `LAST_PAGES` | 45, 6, 2, 3 implicit |
 
-## Instalare (o singură dată)
+Verificarea periodică (notificări, trimitere automată, raport lunar) o face GitHub Actions
+(`.github/workflows/tick.yml`) la ~30 de minute. Dacă site-ul nu răspunde, rularea eșuează și GitHub
+trimite un mail.
 
-1. Instalează [Python 3](https://www.python.org/downloads/) (pe Windows bifează *Add Python to PATH*).
-2. În folderul aplicației rulează:
-   ```
-   pip install -r requirements.txt
-   ```
-3. Copiază `config.example.ini` ca `config.ini` și completează adresa de mail și parola.
-   - **Gmail:** activează verificarea în 2 pași, apoi creează o *parolă de aplicație*
-     la https://myaccount.google.com/apppasswords și pune-o la `password`.
-   - **Outlook / Yahoo:** la fel, folosește o parolă de aplicație.
-   - Recomandat: completează `from` (expeditorul) și/sau `subject` ca să fie luate doar mailurile cu transporturi.
-
-## Utilizare
-
-- **Windows:** dublu-click pe `porneste.bat`.
-- **Din terminal:** `python app.py`
-
-PDF-urile originale ajung în `descarcate/`, cele procesate în `procesate/`
-(ex: `Comanda 5_procesat.pdf`). Aplicația ține minte mailurile deja descărcate
-(în `.processed.json`), deci o poți rula oricând fără să obții dubluri.
-
-Fără mail, doar procesare:
+## Dezvoltare
 
 ```
-python app.py fisier1.pdf fisier2.pdf    # fișiere anume
-python app.py --local un_folder          # toate PDF-urile dintr-un folder
+pip install -r requirements-dev.txt
+python -m pytest -q tests      # rulează și pe GitHub la fiecare modificare
+python web_app.py               # local, pe portul 8000
 ```
 
-Numărul de copii ale primei pagini și numărul de pagini de la final se pot schimba
-în `config.ini` (`first_page_copies`, `last_pages`).
+Testele folosesc un server IMAP în memorie și PDF-uri DSV generate (fără date reale).
 
-## Site cu conectare la mail (Yahoo) — pentru iPhone / iPad
+## De verificat pe un iPhone real
 
-`web_app.py` e un site în care poți **încărca PDF-urile direct** (merge și fără
-mail configurat) sau care se conectează la mail, îți arată mailurile cu
-PDF-uri și îți dă înapoi PDF-urile procesate: **un singur PDF** cu toate
-(gata de printat) sau un **ZIP** cu câte un PDF pentru fiecare mail.
-Mailurile deja descărcate sunt marcate, iar cele noi sunt bifate automat.
+1. Safari → adresa site-ului → Partajează → „Adaugă pe ecranul principal”; iconița Cirforvest apare și
+   aplicația se deschide fără bara Safari.
+2. Setări → Notificări → „Activează” (din aplicația de pe ecranul principal) → „Trimite o notificare de
+   test” → apare notificarea.
+3. Setări iPhone → Afișaj → Mărimea textului la maxim: textul din aplicație crește, butoanele rămân
+   folosibile.
+4. VoiceOver pornit: butoanele și căsuțele au nume citite corect; pagina de verificare se poate parcurge.
+5. Pagina de verificare: glisare între pagini, ciupire, tragere în jos pentru închidere.
+6. „Trimite șoferului” → apare meniul de partajare cu PDF-ul.
+7. Comenzi → „Abonează-te în Calendar” → evenimentele apar în Calendar.
+8. După 20 de minute fără folosire, deschide aplicația: apare „Serverul pornește…”, apoi pagina.
 
-Înainte de descărcare vezi o pagină de verificare: miniaturile fiecărui document
-(apasă pe una ca s-o vezi mare), numele fișierului luat din numărul comenzii
-(îl poți modifica) și o avertizare dacă un PDF nu are 6 pagini.
-Pe iPhone/Android site-ul se adaugă pe ecranul principal ca o aplicație (iconiță proprie,
-fără bara browserului). „Comenzi noi” și „Pregătește” rulează în fundal, cu progres
-„comanda 7 din 14”; în vizualizatorul de pagini se glisează între pagini, se ciupește pentru
-mărire și se trage în jos pentru închidere.
+## Aplicația de calculator (fără server)
 
-Butonul **Trimite pe mail** pune în Inbox-ul contului conectat două mailuri cu PDF-urile
-gata de printat: întâi comenzile cu Toll_RO (dacă există), apoi restul. Serverul gratuit
-Render nu poate trimite mailuri (SMTP blocat), așa că mailurile sunt adăugate direct prin
-IMAP în Inbox — merge doar pentru adresa contului conectat.
-Butonul **Excel** descarcă un registru cu detaliile comenzilor citite de pe prima
-pagină (format DSV „Comanda Transport”): nr. comandă, date, locuri de încărcare și
-descărcare, marfă, greutate, LDM, preț, nr. camion, referințe — cu total pe monedă.
-Aplicația de calculator scrie același registru în `procesate/`.
-
-### 1. Parola de aplicație Yahoo
-
-login.yahoo.com → **Securitatea contului** → **Generează parolă de aplicație**
-→ copiază codul de 16 litere. (Parola obișnuită nu merge.)
-
-### 2. Găzduirea (gratuit, pe Render.com)
-
-1. Fă-ți cont pe https://render.com cu contul de GitHub.
-2. **New → Blueprint** și alege acest repo (folosește `render.yaml`).
-3. Completează variabilele:
-
-| Variabilă | Ce pui |
-|---|---|
-| `MAIL_USER` | adresa ta, ex. `nume@yahoo.com` |
-| `MAIL_PASSWORD` | parola de aplicație Yahoo (16 litere) |
-| `SITE_PASSWORD` | o parolă aleasă de tine, cerută când deschizi site-ul |
-| `FILTER_FROM` | opțional: expeditorul comenzilor, ex. `comenzi@firma.ro` |
-| `FILTER_SUBJECT` | opțional: text din subiect, ex. `transport` |
-
-4. După deploy primești o adresă de forma `https://pagini-transport.onrender.com`.
-   Deschide-o în Safari → Partajează → **Adaugă pe ecranul principal**.
-
-**Trimitere din Mail pe iPhone:** pagina `/scurtatura` de pe site explică pas cu pas
-cum faci o scurtătură iOS („Cirforvest”) care trimite PDF-ul din meniul de partajare
-la `/api/upload` și deschide direct pagina de verificare.
-
-Pe planul gratuit site-ul „adoarme” după 15 minute fără folosire și pornește
-în ~1 minut la prima deschidere; tot acolo, marcajul „descărcat” se pierde
-la repornire (pentru a-l păstra, adaugă un disc și setează `DATA_DIR`).
-Merge și pe orice alt server: `docker build -t transport . && docker run -p 8000:8000 --env-file .env transport`.
-
-Alte setări: `MAIL_SERVER` (implicit `imap.mail.yahoo.com`; Gmail = `imap.gmail.com`),
-`MAIL_FOLDER` (implicit `INBOX`), `FIRST_PAGE_COPIES` (2), `LAST_PAGES` (3), `EXPECTED_PAGES` (6).
-
-## Pe iPhone / iPad, fără server
-
-Python nu rulează pe iOS, așa că există și o versiune web în `web/index.html`
-(folosește [pdf-lib](https://pdf-lib.js.org), totul se face local, în browser):
-
-1. În Mail, ține apăsat pe atașamentul PDF → **Salvează în Fișiere**.
-2. Deschide pagina, apasă **Alege PDF-uri** și selectează unul sau mai multe fișiere.
-3. Apasă **Salvează** (poți bifa să pună toate documentele într-un singur PDF, util la printat).
-
-Pagina poate fi deschisă ca artifact în aplicația Claude sau găzduită oriunde
-(de ex. GitHub Pages) și adăugată pe ecranul principal din Safari
-(Partajează → Adaugă pe ecranul principal).
+`app.py` (Windows: `porneste.bat`) descarcă PDF-urile prin IMAP, le procesează în `procesate/` și scrie
+registrul Excel. Setări în `config.ini` (vezi `config.example.ini`).

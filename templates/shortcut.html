@@ -22,7 +22,7 @@
         <div class="copy"><code id="u">{{ api_url }}</code><button type="button" data-copy="u">Copiază</button></div>
       </li>
       <li>Apasă pe săgeata / <b>Afișează mai mult</b>: <b>Metodă</b> = <b>POST</b>, <b>Corpul cererii</b> = <b>Formular</b> (<i>Form</i>).</li>
-      <li>Adaugă un câmp <b>Text</b>: cheia <code>password</code>, valoarea = parola site-ului.</li>
+      <li>Adaugă un câmp <b>Text</b>: cheia <code>key</code>, valoarea = cheia scurtăturii din <a href="{{ url_for('settings') }}#key">Setări</a> (o generează administratorul; o poți schimba oricând fără să schimbi parola site-ului).</li>
       <li>Adaugă un câmp <b>Fișier</b> (<i>File</i>): cheia <code>pdf</code>, valoarea = variabila <b>Intrare scurtătură</b> (<i>Shortcut Input</i>).</li>
     </ul>
   </li>
@@ -37,7 +37,7 @@
 <details class="muted small">
   <summary>Nu merge?</summary>
   <ul>
-    <li><b>„Parolă greșită”</b> — verifică parola din câmpul <code>password</code> (litere mari/mici, caracterul #).</li>
+    <li><b>„Cheie sau parolă greșită”</b> — verifică valoarea din câmpul <code>key</code>. Scurtăturile vechi, cu parola în câmpul <code>password</code>, merg în continuare.</li>
     <li><b>Nu apare Cirforvest la Partajează</b> — derulează lista de acțiuni până jos și apasă <b>Editează acțiunile</b>; sau verifică pasul 2.</li>
     <li><b>Durează un minut</b> — serverul gratuit „doarme” după 15 minute fără folosire; prima trimitere îl trezește.</li>
   </ul>

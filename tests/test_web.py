@@ -13,7 +13,7 @@ def test_login_required_and_wrong_password():
     c = web_app.app.test_client()
     assert c.get("/").status_code == 302
     r = c.post("/login", data={"password": "gresit"})
-    assert "Parolă greșită" in r.get_data(as_text=True)
+    assert "Utilizator sau parolă greșită" in r.get_data(as_text=True)
 
 
 def test_login_blocked_after_five_wrong_passwords():

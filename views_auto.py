@@ -9,13 +9,14 @@ from datetime import datetime
 
 from flask import abort, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
+import accounts
 import automation
 import journal
 from mailbox_client import Mailbox
 from transport_order import build_register
 from views_orders import REGISTER_EXTRA, _in_period, _orders, _register_rows
-from web_app import (DEFAULT_FROM, MAIL, NEW_ORDERS_DAYS, _friendly_error, _jobs_dir, app, collect_new_orders,
-                     deliver_orders, login_required)
+from web_app import (DEFAULT_FROM, MAIL, NEW_ORDERS_DAYS, SITE_PASSWORD, _friendly_error, _jobs_dir, app,
+                     collect_new_orders, deliver_orders, login_required)
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -133,8 +134,74 @@ def settings():
 
 
 def settings_extra(raw):
-    """Secțiunile adăugate de alte module (utilizatori, scurtătură) — înlocuită acolo."""
-    return {}
+    users = sorted((name, bool(u.get("admin"))) for name, u in (raw.get("users") or {}).items())
+    return {"users": users, "is_admin": bool(session.get("admin")), "me": session.get("user", ""),
+            "has_shortcut_key": bool(raw.get("shortcut_key_hash")), "msg": request.args.get("msg", "")}
+
+
+def _admin_only():
+    if not session.get("admin"):
+        abort(403)
+
+
+def _settings_back(msg):
+    return redirect(url_for("settings", msg=msg) + "#cont")
+
+
+@app.route("/setari/parola", methods=["POST"])
+@login_required
+def change_password():
+    me = session.get("user") or accounts.ADMIN
+    raw, error = _read_raw()
+    if error:
+        return _settings_back(error)
+    if not accounts.check_login(raw, SITE_PASSWORD, "" if me == accounts.ADMIN else me, request.form.get("current", "")):
+        return _settings_back("Parola actuală nu e bună.")
+    problem = accounts.validate_password(request.form.get("new", ""), request.form.get("repeat", ""))
+    if problem:
+        return _settings_back(problem)
+    journal.update(lambda r: accounts.set_password(r, me, request.form["new"]))
+    return _settings_back("Parola a fost schimbată.")
+
+
+@app.route("/setari/utilizatori", methods=["POST"])
+@login_required
+def manage_users():
+    _admin_only()
+    action, name = request.form.get("action"), request.form.get("name", "")
+    raw, error = _read_raw()
+    if error:
+        return _settings_back(error)
+    if action == "add":
+        problem = accounts.validate_new_user(raw, name) or accounts.validate_password(request.form.get("password", ""))
+        if problem:
+            return _settings_back(problem)
+        journal.update(lambda r: accounts.add_user(r, name, request.form["password"], bool(request.form.get("admin"))))
+        return _settings_back(f"Am adăugat utilizatorul {accounts.normalize(name)}.")
+    if action == "remove":
+        journal.update(lambda r: accounts.remove_user(r, name))
+        return _settings_back(f"Am șters utilizatorul {accounts.normalize(name)}.")
+    abort(400)
+
+
+@app.route("/setari/cheie-scurtatura", methods=["POST"])
+@login_required
+def shortcut_key():
+    """Cheie nouă pentru scurtătura iPhone; cea veche nu mai merge. Se arată o singură dată."""
+    _admin_only()
+    holder = {}
+
+    def change(raw):
+        holder["key"], raw = accounts.new_shortcut_key(raw)
+        return raw
+    try:
+        journal.update(change)
+    except Exception as e:
+        return _settings_back(_friendly_error(e))
+    return render_template("message.html", title="Cheia nouă a scurtăturii",
+                           text=("Pune cheia de mai jos în scurtătura „Cirforvest” de pe iPhone, la câmpul key "
+                                 "(în locul parolei). O vezi doar acum; cea veche nu mai merge."),
+                           code=holder["key"], back=url_for("shortcut_help"))
 
 
 @app.route("/push/abonare", methods=["POST"])

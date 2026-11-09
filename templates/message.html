@@ -2,6 +2,11 @@
 {% block body %}
 <div><div class="label">Cirforvest</div><h1>{{ title }}</h1></div>
 <p>{{ text }}</p>
+{% if code %}<div class="copy"><code id="code">{{ code }}</code><button type="button" id="copybtn">Copiază</button></div>
+<script>document.getElementById("copybtn").onclick = async (e) => {
+  try { await navigator.clipboard.writeText(document.getElementById("code").textContent); e.target.textContent = "Copiat"; }
+  catch (err) { const r = document.createRange(); r.selectNodeContents(document.getElementById("code")); getSelection().removeAllRanges(); getSelection().addRange(r); }
+};</script>{% endif %}
 {% if start_form %}
 <form method="post" action="{{ url_for('new_orders_start') }}" class="startform" id="startform">
   <label for="day">Ai descărcat comenzi și înainte, din Yahoo? Spune-mi când a fost ultima dată, ca să le iau pe toate venite de atunci (chiar dacă sunt deschise în mail):</label>

@@ -33,6 +33,47 @@
 </form>
 
 
+<section class="section" id="cont">
+  <h2>Contul tău <span class="chip">{{ me or 'admin' }}{% if is_admin %} · administrator{% endif %}</span></h2>
+  {% if msg %}<p class="warn" role="status" style="margin:0">{{ msg }}</p>{% endif %}
+  <form method="post" action="{{ url_for('change_password') }}" style="display:flex;flex-direction:column;gap:8px;margin:0">
+    <input type="text" name="username" value="{{ '' if me == 'admin' else me }}" autocomplete="username" class="vh" tabindex="-1" aria-hidden="true" readonly>
+    <label class="muted small" for="pcur">Parola actuală</label><input type="password" id="pcur" name="current" autocomplete="current-password" required>
+    <label class="muted small" for="pnew">Parola nouă (minim 8 caractere)</label><input type="password" id="pnew" name="new" autocomplete="new-password" minlength="8" required>
+    <label class="muted small" for="prep">Repetă parola nouă</label><input type="password" id="prep" name="repeat" autocomplete="new-password" minlength="8" required>
+    <button type="submit">Schimbă parola</button>
+  </form>
+</section>
+
+{% if is_admin %}
+<section class="section" id="users">
+  <h2>Utilizatori</h2>
+  <p class="muted small" style="margin:0">Fiecare om cu numele și parola lui; în istoric se vede cine a trimis ce. Administratorul intră cu utilizatorul gol.</p>
+  {% for name, adm in users %}
+  <form method="post" action="{{ url_for('manage_users') }}" class="inline">
+    <input type="hidden" name="action" value="remove"><input type="hidden" name="name" value="{{ name }}">
+    <span style="flex:1"><b>{{ name }}</b>{% if adm %} <span class="chip">administrator</span>{% endif %}</span>
+    <button type="submit">Șterge</button>
+  </form>
+  {% endfor %}
+  <form method="post" action="{{ url_for('manage_users') }}" style="display:flex;flex-direction:column;gap:8px;margin:0">
+    <input type="hidden" name="action" value="add">
+    <label class="muted small" for="uname">Utilizator nou</label>
+    <input type="text" id="uname" name="name" placeholder="ex. dispecer" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+    <label class="muted small" for="upass">Parola lui (minim 8 caractere)</label>
+    <input type="password" id="upass" name="password" autocomplete="new-password" minlength="8" required>
+    <label class="check"><input type="checkbox" name="admin"> Poate administra (utilizatori, cheia scurtăturii)</label>
+    <button type="submit">Adaugă utilizatorul</button>
+  </form>
+</section>
+
+<section class="section" id="key">
+  <h2>Cheia scurtăturii iPhone <span class="chip {{ 'ok' if has_shortcut_key else '' }}">{{ 'setată' if has_shortcut_key else 'nesetată' }}</span></h2>
+  <p class="muted small" style="margin:0">Mai sigur decât parola în scurtătură: o cheie care doar trimite PDF-uri și pe care o poți schimba oricând.</p>
+  <form method="post" action="{{ url_for('shortcut_key') }}" style="margin:0"><button type="submit">{{ 'Generează o cheie nouă' if has_shortcut_key else 'Generează cheia' }}</button></form>
+</section>
+{% endif %}
+
 <section class="section">
   <h2>Pe telefon</h2>
   <a class="btn" href="{{ url_for('shortcut_help') }}">Trimite PDF-uri din Mail cu o apăsare (iPhone)</a>

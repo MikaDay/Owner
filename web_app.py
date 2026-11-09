@@ -26,6 +26,7 @@ from flask import (Flask, abort, redirect, render_template, request, send_file,
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import accounts
 import journal
 import registry
 from mailbox_client import Mailbox, record_download, state_from_journal
@@ -159,6 +160,9 @@ def manifest():
         "description": "Comenzile de transport DSV, gata de printat.",
         "start_url": "/", "scope": "/", "display": "standalone",
         "background_color": "#f3f4f1", "theme_color": "#f3f4f1",
+        # Android: Cirforvest apare în meniul „Distribuie” pentru PDF-uri (după „Instalează aplicația”).
+        "share_target": {"action": "/distribuie", "method": "POST", "enctype": "multipart/form-data",
+                         "params": {"title": "title", "files": [{"name": "pdf", "accept": ["application/pdf", ".pdf"]}]}},
         "icons": [
             {"src": url_for("static", filename="icon-192.png"), "sizes": "192x192", "type": "image/png"},
             {"src": url_for("static", filename="icon-512.png"), "sizes": "512x512", "type": "image/png"},
@@ -178,16 +182,30 @@ def login():
     nxt = _safe_next(request.values.get("next", ""))
     if request.method == "POST":
         wait = _login_blocked()
+        who = None if wait else accounts.check_login(_accounts_journal(), SITE_PASSWORD,
+                                                      request.form.get("username", ""), request.form.get("password", ""))
         if wait:
             error = f"Prea multe parole greșite. Încearcă din nou peste {wait} minute."
-        elif hmac.compare_digest(request.form.get("password", ""), SITE_PASSWORD):
+        elif who:
+            session.clear()
             session.permanent = True
-            session["ok"] = True
+            session.update(ok=True, user=who[0], admin=who[1])
             return redirect(nxt or url_for("index"))
         else:
             _login_failed()
-            error = "Parolă greșită."
+            error = "Utilizator sau parolă greșită."
     return render_template("login.html", error=error, next=nxt or "")
+
+
+def _accounts_journal():
+    """Conturile din jurnal (copia locală); dacă mailul nu merge, rămâne parola din SITE_PASSWORD."""
+    if not (MAIL["user"] and MAIL["password"]):
+        return {}
+    try:
+        return journal.read()
+    except Exception as e:
+        app.logger.warning("Nu am putut citi conturile: %s", e)
+        return {}
 
 
 @app.route("/logout")
@@ -525,20 +543,37 @@ def upload():
     return _job_response(token, problems, "Fișierele alese nu sunt PDF-uri.")
 
 
+@app.route("/distribuie", methods=["POST"])
+def share_target():
+    """PDF-uri primite din meniul „Distribuie” (Android, aplicația instalată)."""
+    if not session.get("ok"):
+        return render_template("message.html", title="Intră mai întâi în cont",
+                               text="Deschide Cirforvest, intră cu parola, apoi distribuie din nou PDF-ul.",
+                               back=url_for("login"))
+    uploads = [f for key in request.files for f in request.files.getlist(key) if f]
+    if not uploads:
+        return redirect(url_for("index"))
+    token, problems = _job_from_uploads(uploads)
+    return _job_response(token, problems, "Fișierele primite nu sunt PDF-uri.")
+
+
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     """Primire din scurtătura „Trimite la Cirforvest” de pe iPhone.
 
     Primește PDF-urile (orice nume de câmp) și parola site-ului în câmpul
     `password`; răspunde cu linkul paginii de verificare, ca text simplu."""
+    key = request.form.get("key") or request.headers.get("X-Key", "")
     given = request.form.get("password") or request.headers.get("X-Password", "")
     wait = _login_blocked()
     if wait:
         return (f"Prea multe parole greșite. Încearcă din nou peste {wait} minute.", 429,
                 {"Content-Type": "text/plain; charset=utf-8"})
-    if not SITE_PASSWORD or not hmac.compare_digest(given, SITE_PASSWORD):
+    raw = _accounts_journal()
+    # Cheia scurtăturii (din Setări); parola de administrator rămâne acceptată pentru scurtăturile vechi.
+    if not (accounts.check_shortcut_key(raw, key) or accounts.check_login(raw, SITE_PASSWORD, "", given)):
         _login_failed()
-        return "Parolă greșită. Verifică parola din scurtătură.", 403, {"Content-Type": "text/plain; charset=utf-8"}
+        return "Cheie sau parolă greșită. Verifică scurtătura.", 403, {"Content-Type": "text/plain; charset=utf-8"}
     uploads = [f for key in request.files for f in request.files.getlist(key) if f]
     if not uploads:
         return "Nu am primit niciun PDF.", 400, {"Content-Type": "text/plain; charset=utf-8"}

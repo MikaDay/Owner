@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}">
 <title>{% block title %}Cirforvest{% endblock %}</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='fonts/fonts.css') }}">
 <style>
 :root {
   --bg: #f3f4f1; --surface: #fff; --fg: #1d2421; --muted: #5f6a65; --line: #d7dbd6; --seg-bg: #e3e5e0; --seg-on: #fff;

@@ -72,10 +72,10 @@
   <div class="vhint" id="vhint">Glisează pentru altă pagină · ciupește pentru mărire · trage în jos ca să închizi</div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/pdf.min.js') }}"></script>
 <script>
 (() => {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "{{ url_for('static', filename='vendor/pdf.worker.min.js') }}";
   const $ = (id) => document.getElementById(id);
 
   async function renderPage(pdf, n, canvas, cssWidth, sharpness = 1) {

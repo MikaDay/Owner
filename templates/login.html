@@ -3,9 +3,9 @@
 <div><div class="label">Comandă transport · PDF</div><h1>Cirforvest</h1></div>
 <form method="post" action="{{ url_for('login') }}" style="display:flex;flex-direction:column;gap:12px">
   <input type="hidden" name="next" value="{{ next }}">
-  {# Câmp de utilizator ascuns vizual: fără el, iPhone (Keychain) nu oferă salvarea parolei. #}
-  <input type="text" name="username" value="Cirforvest" autocomplete="username" class="vh" tabindex="-1" aria-hidden="true" readonly>
-  <label for="password" class="muted">Parola site-ului</label>
+  <label for="username" class="muted">Utilizator <span class="small">(gol dacă ești administratorul)</span></label>
+  <input type="text" id="username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+  <label for="password" class="muted">Parola</label>
   <input type="password" id="password" name="password" autocomplete="current-password" enterkeyhint="go" autofocus>
   {% if error %}<p class="err" style="margin:0" role="alert">{{ error }}</p>{% endif %}
   <button class="primary" type="submit">Intră</button>
