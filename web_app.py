@@ -288,31 +288,35 @@ def new_orders():
     if not (MAIL["user"] and MAIL["password"]):
         return redirect(url_for("index"))
 
-    def work(path):
-        info = []
-        with Mailbox(**MAIL) as mb:
-            _set_status(path, phase="Se caută comenzile noi în mail…")
-            try:
-                state = state_from_journal(journal.read(fresh=True, mb=mb))
-            except Exception as e:
-                app.logger.warning("Nu am putut citi jurnalul descărcărilor: %s", e)
-                state = {"last_download": None, "downloaded": {}}
-                info.append("Nu am putut citi jurnalul descărcărilor; am luat doar comenzile necitite.")
-            last = state["last_download"]
-            info.insert(0, f"Ultima descărcare de pe site: {when(last)}." if last else
-                        "Prima descărcare de pe site: iau comenzile necitite și pe cele dintre ele.")
-            nothing = {"title": "Nicio comandă nouă", "start_form": True,
-                       "last_date": last.astimezone(RO).date().isoformat() if last else ""}
-            found = mb.list_messages(days=NEW_ORDERS_DAYS, sender=DEFAULT_FROM, subject=DEFAULT_SUBJECT)
-            picked = pick_new(found, state)
-            if not picked:
-                return [], (f"{info[0]} Nu există comenzi necitite sau nedescărcate "
-                            f"în ultimele {NEW_ORDERS_DAYS} de zile."), nothing
-            labels = {m["uid"]: (m["subject"], m["message_id"], describe(reason, last)) for m, reason in picked}
-            _, problems = _job_from_mail(mb, labels, orders_only=True, info=info, path=path)
-        return problems, f"{info[0]} Nu sunt comenzi noi de descărcat.", nothing
+    return redirect(url_for("progress", token=_start_job(collect_new_orders, "Se caută comenzile noi în mail…")))
 
-    return redirect(url_for("progress", token=_start_job(work, "Se caută comenzile noi în mail…")))
+
+def collect_new_orders(path):
+    """Pregătește comenzile noi în `path` (vezi new_orders.pick_new). Folosit de butonul „Comenzi noi”
+    și de trimiterea automată. Întoarce (probleme, text_dacă_nu_e_nimic, opțiuni_pagină)."""
+    info = []
+    with Mailbox(**MAIL) as mb:
+        _set_status(path, phase="Se caută comenzile noi în mail…")
+        try:
+            state = state_from_journal(journal.read(fresh=True, mb=mb))
+        except Exception as e:
+            app.logger.warning("Nu am putut citi jurnalul descărcărilor: %s", e)
+            state = {"last_download": None, "downloaded": {}}
+            info.append("Nu am putut citi jurnalul descărcărilor; am luat doar comenzile necitite.")
+        last = state["last_download"]
+        info.insert(0, f"Ultima descărcare de pe site: {when(last)}." if last else
+                    "Prima descărcare de pe site: iau comenzile necitite și pe cele dintre ele.")
+        nothing = {"title": "Nicio comandă nouă", "start_form": True,
+                   "last_date": last.astimezone(RO).date().isoformat() if last else ""}
+        found = mb.list_messages(days=NEW_ORDERS_DAYS, sender=DEFAULT_FROM, subject=DEFAULT_SUBJECT)
+        picked = pick_new(found, state)
+        if not picked:
+            return [], (f"{info[0]} Nu există comenzi necitite sau nedescărcate "
+                        f"în ultimele {NEW_ORDERS_DAYS} de zile."), nothing
+        labels = {m["uid"]: (m["subject"], m["message_id"], describe(reason, last)) for m, reason in picked}
+        _, problems = _job_from_mail(mb, labels, orders_only=True, info=info, path=path)
+    return problems, f"{info[0]} Nu sunt comenzi noi de descărcat.", nothing
+
 
 
 @app.route("/cauta")
@@ -823,43 +827,50 @@ def export(token):
     return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=f"{prefix}_{stamp}.pdf")
 
 
-def _send_by_mail(path, items, chosen, names, token):
-    """„Trimite pe mail”: două mailuri în Inbox — întâi comenzile cu Toll_RO (dacă există), apoi restul."""
+def deliver_orders(path, items, chosen, names, user=""):
+    """Pune comenzile alese în Inbox (două mailuri: întâi cele cu Toll_RO, apoi restul), le notează în
+    registru și le marchează citite. Fără pagină web: folosit și de trimiterea automată.
+    Întoarce lista mailurilor trimise; aruncă excepție dacă mailul nu merge."""
     now = datetime.now(RO)
     chosen = sorted(chosen, key=lambda i: _print_key(items[i]))
     groups = [(label, [i for i in chosen if _is_toll(items[i]) == toll])
               for label, toll in (("Toll_RO", True), ("fără Toll_RO", False))]
     groups = [(label, idx) for label, idx in groups if idx]
     sent = []
-    try:
-        with Mailbox(**MAIL) as mb:
-            for n, (label, idx) in enumerate(groups):
-                fname = (f"transporturi_Toll_RO_{now:%Y-%m-%d_%H%M}.pdf" if label == "Toll_RO"
-                         else f"transporturi_{now:%Y-%m-%d_%H%M}.pdf")
-                pdf = merge([(path / f"{i}.pdf").read_bytes() for i in idx])
-                lines = [f"- {items[i].get('order_no') or names[i]}"
-                         + (f" · {items[i]['summary']}" if items[i].get("summary") else "") for i in idx]
-                subject = (f"Comenzi {label} - {len(idx)} "
-                           f"{'comandă' if len(idx) == 1 else 'comenzi'} - {now:%d.%m.%Y %H:%M}")
-                text = (f"{len(idx)} {'comandă' if len(idx) == 1 else 'comenzi'} {label}, gata de printat "
-                        f"(detaliile x2 + termenii și condițiile):\n\n" + "\n".join(lines)
-                        + "\n\nTrimis de Cirforvest.")
-                # Toll_RO primul; restul cu o secundă mai târziu, ca ordinea din Inbox să fie clară.
-                mb.deliver_to_inbox(MAIL["user"], subject, text, [(fname, pdf)], when=now.timestamp() + n)
-                sent.append(f"{subject} ({fname})")
-    except Exception as e:
-        return render_template("message.html", title="Nu am putut trimite pe mail",
-                               text=(f"Trimise: {'; '.join(sent)}. " if sent else "") + _friendly_error(e),
-                               back=url_for("review", token=token))
+    with Mailbox(**MAIL) as mb:
+        for n, (label, idx) in enumerate(groups):
+            fname = (f"transporturi_Toll_RO_{now:%Y-%m-%d_%H%M}.pdf" if label == "Toll_RO"
+                     else f"transporturi_{now:%Y-%m-%d_%H%M}.pdf")
+            pdf = merge([(path / f"{i}.pdf").read_bytes() for i in idx])
+            lines = [f"- {items[i].get('order_no') or names[i]}"
+                     + (f" · {items[i]['summary']}" if items[i].get("summary") else "") for i in idx]
+            subject = (f"Comenzi {label} - {len(idx)} "
+                       f"{'comandă' if len(idx) == 1 else 'comenzi'} - {now:%d.%m.%Y %H:%M}")
+            text = (f"{len(idx)} {'comandă' if len(idx) == 1 else 'comenzi'} {label}, gata de printat "
+                    f"(detaliile x2 + termenii și condițiile):\n\n" + "\n".join(lines)
+                    + "\n\nTrimis de Cirforvest.")
+            # Toll_RO primul; restul cu o secundă mai târziu, ca ordinea din Inbox să fie clară.
+            mb.deliver_to_inbox(MAIL["user"], subject, text, [(fname, pdf)], when=now.timestamp() + n)
+            sent.append(f"{subject} ({fname})")
     _mark_downloaded([items[i]["message_id"] for i in chosen])
-    _record_download([items[i] for i in chosen])
+    _record_download([items[i] for i in chosen], user=user)
+    return sent
+
+
+def _send_by_mail(path, items, chosen, names, token):
+    """„Trimite pe mail” din pagina de verificare."""
+    try:
+        sent = deliver_orders(path, items, chosen, names, user=session.get("user", ""))
+    except Exception as e:
+        return render_template("message.html", title="Nu am putut trimite pe mail", text=_friendly_error(e),
+                               back=url_for("review", token=token))
     return render_template("message.html", title="Trimis pe mail",
                            text=f"Am pus {len(sent)} {'mail' if len(sent) == 1 else 'mailuri'} în Inbox la "
                                 f"{MAIL['user']}: " + "; ".join(sent) + ".",
                            back=url_for("review", token=token))
 
 
-def _record_download(items):
+def _record_download(items, user=""):
     """După trimitere: comenzile intră în registru și în jurnal (cu data descărcării), iar mailurile
     devin „citite”. O eroare aici nu trebuie să oprească trimiterea."""
     if not (MAIL["user"] and MAIL["password"]):
@@ -867,7 +878,6 @@ def _record_download(items):
     uids = [it.get("uid") for it in items if it.get("uid")]
     message_ids = [it["message_id"] for it in items if it.get("message_id")]
     details = [it.get("details") or {} for it in items]
-    user = session.get("user", "")
 
     def change(raw):
         raw = record_download(raw, message_ids)
@@ -894,6 +904,7 @@ def _friendly_error(e):
 
 
 import views_orders  # noqa: E402,F401  (paginile registrului; au nevoie de app și de funcțiile de mai sus)
+import views_auto  # noqa: E402,F401  (notificări, setări, trimitere automată)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8000")), debug=False)

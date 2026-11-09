@@ -186,8 +186,9 @@ class Mailbox:
         msg["Message-ID"] = email.utils.make_msgid(domain="cirforvest.local")
         msg[APP_HEADER] = "1"
         msg.set_content(text)
-        for name, data in attachments:
-            msg.add_attachment(data, maintype="application", subtype="pdf", filename=name)
+        for name, data, *mime in attachments:          # (nume, conținut[, „tip/subtip”]); implicit PDF
+            maintype, subtype = (mime[0] if mime else "application/pdf").split("/", 1)
+            msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=name)
         typ, data = self.imap.append(f'"{self.folder}"', "()", imaplib.Time2Internaldate(when or time.time()),
                                      msg.as_bytes())
         if typ != "OK":

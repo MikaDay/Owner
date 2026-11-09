@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Setări · Cirforvest{% endblock %}
+{% block body %}
+<div class="top">
+  <div><div class="label">Cirforvest</div><h1>Setări</h1></div>
+  <a href="{{ url_for('logout') }}">Ieși</a>
+</div>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+{% if saved %}<p class="muted" role="status" style="margin:0">Salvat.</p>{% endif %}
+
+<section class="section" id="notif">
+  <h2>Notificări pe acest telefon <span class="chip" id="nstate">…</span></h2>
+  <p class="muted small" style="margin:0" id="nhint">Afli imediat când vin comenzi noi, fără să deschizi aplicația.</p>
+  <button type="button" class="primary" id="non" hidden>Activează notificările</button>
+  <button type="button" id="ntest" hidden>Trimite o notificare de test</button>
+  <button type="button" id="noff" hidden>Oprește notificările pe acest telefon</button>
+  <p class="muted small" style="margin:0">Telefoane abonate: {{ devices }}.</p>
+</section>
+
+<form method="post" class="section" id="auto">
+  <h2>Ce face aplicația singură</h2>
+  <label class="check"><input type="checkbox" name="notify_new" {{ 'checked' if cfg.notify_new }}> Notificare când vin comenzi noi</label>
+  <label class="check"><input type="checkbox" name="notify_daily" {{ 'checked' if cfg.notify_daily }}> Rezumatul zilei (documente de trimis, ePOD, plăți restante, încărcări)</label>
+  <label class="check"><input type="checkbox" name="auto_send" {{ 'checked' if cfg.auto_send }}> <span><b>Trimite automat</b> comenzile noi pe mail (Toll_RO separat), fără să deschizi aplicația</span></label>
+  <label class="check"><input type="checkbox" name="monthly_report" {{ 'checked' if cfg.monthly_report }}> Pe 1 ale lunii, registrul Excel al lunii trecute în Inbox</label>
+  <label class="inline" for="hour"><span>Ora pentru rezumat și trimiterea automată</span>
+    <select id="hour" name="daily_hour" style="font:inherit;font-size:max(16px,1rem);min-height:44px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)">
+      {% for h in range(5, 13) %}<option value="{{ h }}" {{ 'selected' if h == cfg.daily_hour|int }}>{{ '%02d' % h }}:00</option>{% endfor %}
+    </select></label>
+  <button type="submit" class="primary">Salvează</button>
+  <p class="muted small" style="margin:0">Verificarea rulează la aproximativ 30 de minute (GitHub Actions).
+    {% if cron.daily %}Ultimul rezumat: {{ cron.daily[8:10] }}.{{ cron.daily[5:7] }}.{% else %}Încă n-a rulat.{% endif %}</p>
+</form>
+
+
+<section class="section">
+  <h2>Pe telefon</h2>
+  <a class="btn" href="{{ url_for('shortcut_help') }}">Trimite PDF-uri din Mail cu o apăsare (iPhone)</a>
+  <a class="btn" href="{{ url_for('history') }}">Istoric trimiteri</a>
+</section>
+
+<script>
+(() => {
+  const key = "{{ vapid_public }}";
+  const $ = (id) => document.getElementById(id);
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+  const show = (state, hint) => {
+    $("nstate").textContent = state;
+    if (hint) $("nhint").textContent = hint;
+  };
+  const toKey = (b64) => {
+    const s = atob((b64 + "=".repeat((4 - b64.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(s, (c) => c.charCodeAt(0));
+  };
+  async function refresh() {
+    if (!key) { show("indisponibile", "Notificările nu sunt configurate pe server (lipsesc cheile VAPID)."); return; }
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      show("indisponibile", ios && !standalone
+        ? "Pe iPhone, notificările merg doar din aplicația de pe ecranul principal: Safari → Partajează → „Adaugă pe ecranul principal”, apoi deschide Cirforvest de acolo și revino aici."
+        : "Browserul acesta nu primește notificări.");
+      return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (Notification.permission === "denied") { show("blocate", "Notificările sunt blocate pentru Cirforvest în setările telefonului."); return; }
+    $("non").hidden = !!sub; $("ntest").hidden = !sub; $("noff").hidden = !sub;
+    show(sub ? "pornite" : "oprite");
+  }
+  $("non").onclick = async () => {
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { refresh(); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: toKey(key) });
+      const r = await fetch("{{ url_for('push_subscribe') }}", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sub) });
+      if (!r.ok) throw new Error("serverul a refuzat abonamentul");
+      refresh();
+    } catch (e) { show("eroare", "Nu am putut porni notificările: " + e.message); }
+  };
+  $("ntest").onclick = async () => {
+    const r = await fetch("{{ url_for('push_test') }}", { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    show("pornite", d.sent ? "Am trimis o notificare de test. Ar trebui să apară în câteva secunde." : (d.error || "Nu am putut trimite notificarea."));
+  };
+  $("noff").onclick = async () => {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await fetch("{{ url_for('push_unsubscribe') }}", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+      await sub.unsubscribe();
+    }
+    refresh();
+  };
+  refresh();
+})();
+</script>
+{% endblock %}

@@ -195,6 +195,8 @@ body.has-tabs .bar { bottom: calc(57px + env(safe-area-inset-bottom)); padding-b
 .chip.late { border-color: var(--err); color: var(--err); font-weight: 700; }
 .chip.soon { border-color: var(--warn); color: var(--warn); font-weight: 600; }
 .chip.todo { border-color: var(--tc); color: var(--tc); }
+.check { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; cursor: pointer; }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); margin: 2px 0 0; flex: none; }
 .searchrow { display: flex; gap: 8px; }
 .searchrow input { flex: 1; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
@@ -236,6 +238,7 @@ window.showWait = (text) => {
   clearInterval(window._waitTimer);
   window._waitTimer = setInterval(() => { el.textContent = Math.round((Date.now() - t0) / 1000) + " s"; }, 1000);
 };
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 window.addEventListener("pageshow", () => {
   document.getElementById("wait").hidden = true;
   clearInterval(window._waitTimer);

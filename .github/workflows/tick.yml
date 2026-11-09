@@ -1,0 +1,24 @@
+name: Verificare periodică
+# La ~30 de minute: comenzi noi → notificare, rezumatul zilei, trimiterea automată, raportul lunar.
+# Dacă site-ul nu răspunde, rularea eșuează și GitHub trimite un mail (alertă că serverul nu merge).
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Cheamă serverul
+        env:
+          CRON_TOKEN: ${{ secrets.CRON_TOKEN }}
+          SITE: https://cirforvest.onrender.com
+        run: |
+          # Serverul gratuit poate dormi: prima cerere îl trezește (până la ~1 minut).
+          for i in 1 2 3; do
+            if curl -fsS --max-time 150 -X POST -H "X-Cron-Token: ${CRON_TOKEN}" "$SITE/cron/tick"; then exit 0; fi
+            sleep 30
+          done
+          echo "::error::Cirforvest nu răspunde la $SITE"
+          exit 1
