@@ -126,7 +126,7 @@ def order(no):
         abort(404)
     st = registry.status(o, _today())
     return render_template("order.html", o=o, st=st, steps=registry.EPOD_STEPS, route=_route(o),
-                           today=_today().isoformat(), money=registry.money, tab="comenzi")
+                           today=_today().isoformat(), money=registry.money, pretty=registry.pretty, tab="comenzi")
 
 
 @app.route("/api/rezumat")

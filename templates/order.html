@@ -82,7 +82,7 @@
   <h2>Modificări de la DSV</h2>
   {% for h in o.history|reverse %}
   <div><b>{{ h.at[8:10] }}.{{ h.at[5:7] }} · versiunea {{ h.version }}</b>
-    <ul class="small" style="margin:4px 0 0;padding-left:18px">{% for label, a, b in h.changes %}<li>{{ label }}: {{ a or '—' }} → <b>{{ b or '—' }}</b></li>{% endfor %}</ul></div>
+    <ul class="small" style="margin:4px 0 0;padding-left:18px">{% for label, a, b in h.changes %}<li>{{ label }}: {{ pretty(a) }} → <b>{{ pretty(b) }}</b></li>{% endfor %}</ul></div>
   {% endfor %}
 </section>
 {% endif %}

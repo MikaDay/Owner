@@ -151,6 +151,20 @@ def summary(raw, today=None):
             "loading_soon": sorted(loading_soon, key=lambda o: (o.get("loading_date") or "", o.get("truck") or ""))}
 
 
+def pretty(value):
+    """O valoare din registru, ca pentru oameni: 2450.0 → „2.450,00”, „2026-10-02” → „02.10.2026”."""
+    if value in (None, ""):
+        return "—"
+    if isinstance(value, bool):
+        return "da" if value else "nu"
+    if isinstance(value, (int, float)):
+        return f"{value:,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".")
+    text = str(value)
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        return f"{text[8:10]}.{text[5:7]}.{text[:4]}"
+    return text
+
+
 def money(amounts):
     """{'RON': 2300.0, 'EUR': 400} → „2.300,00 RON + 400,00 EUR”."""
     return " + ".join(f"{v:,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".") + f" {c}"

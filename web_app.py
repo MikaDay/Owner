@@ -526,12 +526,52 @@ def _summary(d):
     return " · ".join(x for x in (route, when, price, toll) if x)
 
 
+def _annotate(items):
+    """Compară comenzile pregătite cu registrul și între ele:
+    - aceeași comandă de două ori în listă → rămâne cea mai nouă versiune, cealaltă e debifată;
+    - comandă trimisă deja, neschimbată → „duplicat”, debifată;
+    - versiune nouă de la DSV → „modificată”, cu ce s-a schimbat (rămâne bifată)."""
+    raw = {}
+    if MAIL["user"] and MAIL["password"]:
+        try:
+            raw = journal.read()
+        except Exception as e:
+            app.logger.warning("Nu am putut citi registrul: %s", e)
+    best = {}
+    for i, it in enumerate(items):
+        no = it.get("order_no")
+        if no:
+            v = (it.get("details") or {}).get("version") or 1
+            if no not in best or v >= ((items[best[no]].get("details") or {}).get("version") or 1):
+                best[no] = i
+    for i, it in enumerate(items):
+        no = it.get("order_no")
+        if not no:
+            continue
+        if best[no] != i:
+            it["skip"] = True
+            it["flag"] = ("dup", "Aceeași comandă apare de două ori în listă; am bifat doar versiunea cea mai nouă.")
+            continue
+        kind, changes, old = registry.compare(raw, it.get("details") or {})
+        when_sent = (old or {}).get("sent_at", "")
+        sent = f"{when_sent[8:10]}.{when_sent[5:7]}" if when_sent else ""
+        if kind == "duplicat":
+            it["skip"] = True
+            it["flag"] = ("dup", f"Trimisă deja pe {sent}, neschimbată (duplicat). Bifeaz-o doar dacă vrei s-o printezi din nou.")
+        elif kind == "modificat":
+            v = (it.get("details") or {}).get("version") or 1
+            diff = "; ".join(f"{label}: {registry.pretty(a)} → {registry.pretty(b)}" for label, a, b in changes) \
+                or "fără diferențe în date"
+            it["flag"] = ("changed", f"Comandă MODIFICATĂ de DSV (versiunea {v}, trimisă anterior pe {sent}): {diff}.")
+
+
 def _save_job(path, items, problems, info=None):
     """Salvează pregătirea și întoarce token-ul ei, sau None dacă nu s-a procesat nimic."""
     if not items:
         if not (path / "status.json").exists():      # pregătirile în fundal își păstrează starea
             shutil.rmtree(path, ignore_errors=True)
         return None
+    _annotate(items)
     (path / "job.json").write_text(json.dumps({"items": items, "problems": problems, "info": info or []}),
                                    encoding="utf-8")
     return path.name
