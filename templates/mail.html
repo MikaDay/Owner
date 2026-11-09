@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Mail · Cirforvest{% endblock %}
+{% block body %}
+<div class="top">
+  <div><div class="label">{{ m.date }}</div><h1 style="font-size:1.25rem">{{ m.subject or '(fără subiect)' }}</h1></div>
+  <a href="javascript:history.back()">Înapoi</a>
+</div>
+<p class="muted small" style="margin:0">De la: {{ m['from'] }}</p>
+{% if m.files %}
+<section class="section">
+  <h2>Atașamente</h2>
+  {% for name, ctype, data in m.files %}
+  <a class="btn" href="{{ url_for('mail_view', uid=uid, fisier=loop.index0) }}">{{ name }} <span class="muted small">({{ (data|length / 1024)|round(0)|int }} KB)</span></a>
+  {% endfor %}
+</section>
+{% endif %}
+<pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;margin:0">{{ m.text }}</pre>
+{% endblock %}

@@ -358,6 +358,27 @@ def search():
     return redirect(url_for("progress", token=_start_job(work, "Se caută în mail…")))
 
 
+@app.route("/mail/<int:uid>")
+@login_required
+def mail_view(uid):
+    """Orice mail din Inbox: textul și atașamentele (Excel, Word, PDF…) — fără să-l marcheze citit."""
+    try:
+        with Mailbox(**MAIL) as mb:
+            m = mb.read_message(uid)
+    except Exception as e:
+        return render_template("message.html", title="Nu am putut deschide mailul", text=_friendly_error(e))
+    if not m:
+        abort(404)
+    n = request.args.get("fisier", type=int)
+    if n is not None:
+        if not 0 <= n < len(m["files"]):
+            abort(404)
+        name, ctype, data = m["files"][n]
+        return send_file(io.BytesIO(data), mimetype=ctype or "application/octet-stream", as_attachment=True,
+                         download_name=name)
+    return render_template("mail.html", m=m, uid=uid)
+
+
 @app.route("/istoric")
 @login_required
 def history():

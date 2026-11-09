@@ -108,3 +108,18 @@ def test_mail_errors_are_explained(client, server):
     server.fail_login = True
     loc = follow_job(client, client.get("/noi"))
     assert "parolă de aplicație" in client.get(loc).get_data(as_text=True)
+
+
+def test_mail_view_shows_text_and_any_attachment(client, server):
+    from email.message import EmailMessage
+    m = EmailMessage()
+    m["Subject"], m["From"], m["Message-ID"] = "RE: Plata inexistenta", "x@dsv.com", "<p1@dsv>"
+    m.set_content("Factura 123 nu apare in sistem.")
+    m.add_attachment(b"PK\x03\x04xlsx", maintype="application",
+                     subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename="situatie.xlsx")
+    uid = server.add("INBOX", m.as_bytes())
+    html = client.get(f"/mail/{uid.decode()}").get_data(as_text=True)
+    assert "Factura 123 nu apare" in html and "situatie.xlsx" in html
+    r = client.get(f"/mail/{uid.decode()}?fisier=0")
+    assert r.data.startswith(b"PK") and "situatie.xlsx" in r.headers["Content-Disposition"]
+    assert not server.is_seen(uid)

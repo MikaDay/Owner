@@ -60,7 +60,7 @@
       <label class="row">
         <input type="checkbox" name="uid" value="{{ m.uid }}" {% if m.unread and not m.downloaded %}checked{% endif %} data-new="{{ 1 if m.unread and not m.downloaded else 0 }}">
         <span class="subj">{{ m.subject }}{% if m.downloaded %}<span class="badge">descărcat</span>{% elif not m.unread %}<span class="badge read">citit</span>{% endif %}</span>
-        <span class="meta">{{ m.date.strftime('%d.%m.%Y %H:%M') if m.date else '' }} · {{ m.from }}</span>
+        <span class="meta">{{ m.date.strftime('%d.%m.%Y %H:%M') if m.date else '' }} · {{ m.from }} · <a href="{{ url_for('mail_view', uid=m.uid) }}" onclick="event.stopPropagation()">deschide</a></span>
         <input type="hidden" name="mid_{{ m.uid }}" value="{{ m.message_id }}">
         <input type="hidden" name="subj_{{ m.uid }}" value="{{ m.subject }}">
       </label>

@@ -5,6 +5,7 @@ mesajul complet se descarcă doar pentru mailurile alese.
 """
 
 import email
+import email.policy
 import email.utils
 import imaplib
 import json
@@ -193,6 +194,32 @@ class Mailbox:
                                      msg.as_bytes())
         if typ != "OK":
             raise RuntimeError(f"Yahoo nu a acceptat mailul: {data}")
+
+    def read_message(self, uid):
+        """Un mail întreg, pentru afișare: antete, textul și toate atașamentele (fără să-l marcheze citit)."""
+        typ, data = self.imap.uid("FETCH", str(uid).encode(), "(BODY.PEEK[])")
+        if typ != "OK" or not data or not isinstance(data[0], tuple):
+            return None
+        msg = email.message_from_bytes(data[0][1], policy=email.policy.default)
+        text, html_text, files = "", "", []
+        for part in msg.walk():
+            if part.is_multipart():
+                continue
+            filename = part.get_filename()
+            if filename or part.get_content_disposition() == "attachment":
+                files.append((_safe_name(filename or "atasament"), part.get_content_type(),
+                              part.get_payload(decode=True) or b""))
+            elif part.get_content_type() == "text/plain" and not text:
+                text = part.get_content()
+            elif part.get_content_type() == "text/html" and not html_text:
+                html_text = part.get_content()
+        if not text and html_text:              # doar HTML: scoatem textul, fără etichete
+            text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html_text, flags=re.S | re.I)
+            text = re.sub(r"<br\s*/?>|</p>|</div>|</tr>", "\n", text, flags=re.I)
+            text = re.sub(r"<[^>]+>", "", text)
+            text = re.sub(r"\n\s*\n+", "\n\n", __import__("html").unescape(text))
+        return {"subject": msg.get("Subject", ""), "from": msg.get("From", ""), "date": msg.get("Date", ""),
+                "text": text.strip(), "files": files}
 
     def pdf_attachments(self, uid):
         """[(nume_fisier, bytes)] pentru toate PDF-urile din mailul `uid`."""
