@@ -134,11 +134,14 @@ def tick(app_hooks, now=None, sender=webpush.send):
 
     # 1) Comenzi noi, anunțate o singură dată.
     fresh = [m for m, _ in picked if m["message_id"] and m["message_id"] not in notified]
+    announced = []
     if fresh and cfg["notify_new"]:
         n = len(picked)
         body = "; ".join(m["subject"] for m in fresh[:3]) + (" …" if len(fresh) > 3 else "")
-        notify(raw, f"{n} {'comandă nouă' if n == 1 else 'comenzi noi'}", body, url="/noi", tag="noi", sender=sender)
-        done.append(f"notificare: {len(fresh)} noi")
+        # Doar dacă a ajuns pe cel puțin un telefon le socotim anunțate (altfel le anunțăm după abonare).
+        if notify(raw, f"{n} {'comandă nouă' if n == 1 else 'comenzi noi'}", body, url="/noi", tag="noi", sender=sender):
+            announced = fresh
+            done.append(f"notificare: {len(fresh)} noi")
 
     # 2) La ora aleasă: trimiterea automată, apoi rezumatul zilei.
     if now.hour >= int(cfg["daily_hour"]) and cron.get("daily") != today:
@@ -177,7 +180,7 @@ def tick(app_hooks, now=None, sender=webpush.send):
                    url="/rapoarte", tag="lunar", sender=sender)
             done.append(f"raport lunar {month_key}")
 
-    seen = list(notified | {m["message_id"] for m in fresh})[-500:]
+    seen = list(notified | {m["message_id"] for m in announced})[-500:]
     journal.update(lambda r: {**r, "cron": {**(r.get("cron") or {}), **cron},
                               "notify": {**(r.get("notify") or {}), "seen": seen}})
     return done or ["nimic nou"]

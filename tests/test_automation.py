@@ -50,6 +50,15 @@ def test_new_orders_are_announced_once(client, server, pushes):
     assert pushes[-1][1]["title"] == "2 comenzi noi" and "ARWY0002" in pushes[-1][1]["body"]
 
 
+def test_orders_wait_until_a_phone_subscribes(client, server, pushes):
+    server.add_mail("FW: ARWY0001", [("a.pdf", dsv_order(order_no="ARWY0001"))], day=1)
+    tick(datetime(2026, 11, 9, 3, tzinfo=RO))                      # niciun telefon abonat încă
+    assert pushes == []
+    subscribe(client)
+    tick(datetime(2026, 11, 9, 3, 30, tzinfo=RO))
+    assert [m["title"] for _, m in pushes] == ["1 comandă nouă"]
+
+
 def test_dead_subscriptions_are_removed(client, server, pushes):
     subscribe(client, "https://web.push.apple.com/gone")
     subscribe(client)
