@@ -52,7 +52,7 @@ _COUNTY = re.compile(r"^(.+?),?\s+Jud(?:etul|e[tț]ul|\.)?\s*([A-Za-z]{1,2})\.?$
 
 
 def _stops(lines, kind):
-    """Locurile de încărcare/descărcare: [(nume, oraș, dată)], în ordine.
+    """Locurile de încărcare/descărcare: [(nume, oraș, dată, țară)], în ordine.
 
     Blocul de adresă poate conține și mențiuni (ex. „R.F. prin … Urlati 106300”)
     înaintea adresei reale, așa că orașul e ultima linie „cod poștal + oraș” din bloc,
@@ -71,8 +71,11 @@ def _stops(lines, kind):
                 break
             block.append(nxt)
         city_at = max((k for k, ln in enumerate(block) if _POSTAL_CITY.match(ln)), default=None)
-        city = name = ""
+        city = name = country = ""
         if city_at is not None:
+            # Țara e linia de după oraș („ROMANIA”, „GERMANIA”), dacă e scrisă doar cu litere.
+            if city_at + 1 < len(block) and re.fullmatch(r"[A-Za-zĂÂÎȘȚăâîșț .-]{3,30}", block[city_at + 1]):
+                country = block[city_at + 1].strip().upper()
             city = _POSTAL_CITY.match(block[city_at]).group(1).strip()
             county = _COUNTY.match(city)
             if county:
@@ -81,7 +84,7 @@ def _stops(lines, kind):
                          if _COMPANY.search(block[k]) and not _NOTE.search(block[k])), "")
         if not name:
             name = next((ln for ln in block if not _NOTE.search(ln)), "")
-        stops.append((name, city, date))
+        stops.append((name, city, date, country))
     return stops
 
 
@@ -89,7 +92,7 @@ def _place(stops):
     def nice(city):
         return city.title() if city.isupper() else city
     places = []
-    for name, city, _ in stops:
+    for name, city, *_ in stops:
         p = ", ".join(x for x in (name, nice(city)) if x)
         if p and (not places or places[-1] != p):   # același loc de 4 ori → o singură dată
             places.append(p)
@@ -124,8 +127,15 @@ def parse_order(text):
     order_no = find_order_number(text)
     client_ref = _find(r"Nr\.?\s*Comand[aă]:\s*(\S+)", flat)
     price = re.search(r"Transport:\s*([\d.\s]+,\d{2}|[\d]+(?:\.\d{2})?)\s*([A-Z]{3})", flat)
+    countries = {c for *_, c in loading + unloading if c}
+    version = _find(r"versiune\s*(\d+)", flat)
     return {
         "order_no": order_no,
+        "version": int(version) if version else 1,
+        # Transport internațional: termenul pentru documente e 10 zile lucrătoare în loc de 5.
+        "international": bool(countries - {"ROMANIA", "ROMÂNIA", "RO"}),
+        "epod": _find(r"(https://www\.dsv\.com/mydsv/e-pod\?token=[A-Za-z0-9]+)", flat),
+        "issuer_vat": _find(r"VAT No:\s*(RO\s?\d{2,10})", flat).replace(" ", ""),
         "order_date": _date(_find(r"versiune\s*\d+\s*-\s*(\d{2}\.\d{2}\.\d{4})", flat)),
         "issuer": issuer,
         "client_ref": "" if client_ref == order_no else client_ref,
@@ -167,13 +177,15 @@ COLUMNS = [
 ]
 
 
-def build_register(rows):
-    """Registrul Excel (bytes) pentru o listă de dicționare întoarse de parse_order()."""
+def build_register(rows, extra_columns=()):
+    """Registrul Excel (bytes) pentru o listă de dicționare întoarse de parse_order().
+    `extra_columns`: coloane în plus, în același format ca COLUMNS (ex. termene, plăți)."""
+    columns = COLUMNS + list(extra_columns)
     wb = Workbook()
     ws = wb.active
     ws.title = "Transporturi"
     head_fill = PatternFill("solid", fgColor="1D2421")
-    for col, (title, _, width, _) in enumerate(COLUMNS, 1):
+    for col, (title, _, width, _) in enumerate(columns, 1):
         c = ws.cell(row=1, column=col, value=title)
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = head_fill
@@ -183,26 +195,26 @@ def build_register(rows):
 
     rows = sorted(rows, key=lambda r: (r.get("loading_date") is None, r.get("loading_date") or 0, r.get("order_no", "")))
     for r, row in enumerate(rows, 2):
-        for col, (_, key, _, fmt) in enumerate(COLUMNS, 1):
+        for col, (_, key, _, fmt) in enumerate(columns, 1):
             c = ws.cell(row=r, column=col, value=row.get(key))
             if fmt:
                 c.number_format = fmt
 
     # Total pe monedă, sub tabel (formule, ca să se actualizeze dacă editezi prețurile).
     last = len(rows) + 1
-    price_col = get_column_letter([k for _, k, _, _ in COLUMNS].index("price") + 1)
-    cur_col = get_column_letter([k for _, k, _, _ in COLUMNS].index("currency") + 1)
+    price_col = get_column_letter([k for _, k, _, _ in columns].index("price") + 1)
+    cur_col = get_column_letter([k for _, k, _, _ in columns].index("currency") + 1)
     r = last + 2
     for cur in sorted({row.get("currency") for row in rows if row.get("currency")}):
         ws.cell(row=r, column=1, value=f"Total {cur}").font = Font(bold=True)
-        c = ws.cell(row=r, column=[k for _, k, _, _ in COLUMNS].index("price") + 1,
+        c = ws.cell(row=r, column=[k for _, k, _, _ in columns].index("price") + 1,
                     value=f'=SUMIF({cur_col}2:{cur_col}{last},"{cur}",{price_col}2:{price_col}{last})')
         c.number_format = "#,##0.00"
         c.font = Font(bold=True)
         r += 1
 
     ws.freeze_panes = "B2"
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}{last}"
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(columns))}{last}"
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

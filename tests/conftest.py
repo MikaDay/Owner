@@ -36,7 +36,9 @@ def fresh(monkeypatch, tmp_path):
     monkeypatch.setattr(web_app.threading, "Thread", _RunNow)
     monkeypatch.setattr(web_app, "RATE_FILE", tmp_path / "attempts.json")
     monkeypatch.setattr(web_app, "STATE", tmp_path / "downloaded.json")
-    web_app.JOURNAL_CACHE.clear() if hasattr(web_app, "JOURNAL_CACHE") else None
+    import journal
+    monkeypatch.setattr(journal, "CACHE_FILE", tmp_path / "journal.json")
+    monkeypatch.setattr(journal, "LOCK_FILE", tmp_path / "journal.lock")
     yield
 
 

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}{{ o.order_no }} · Cirforvest{% endblock %}
+{% block body %}
+<div class="top">
+  <div><div class="label">Comandă{% if o.version and o.version > 1 %} · versiunea {{ o.version }}{% endif %}</div><h1>{{ o.order_no }}</h1></div>
+  <a href="{{ url_for('orders') }}">Comenzi</a>
+</div>
+<p style="margin:0">{{ route }}{% if o.price %} · <b>{{ money({o.currency or 'RON': o.price}) }}</b>{% endif %}</p>
+<div class="chips">
+  {% if o.toll_ro %}<span class="chip todo">Toll_RO se facturează separat</span>{% endif %}
+  {% if o.international %}<span class="chip">Internațional (10 zile lucrătoare)</span>{% endif %}
+  {% if o.imported %}<span class="chip">Adusă din mail</span>{% endif %}
+</div>
+
+<section class="section" id="epod">
+  <h2>ePOD <span class="chip {{ 'ok' if st.epod_done == st.epod_total else 'todo' }}">{{ st.epod_done }}/{{ st.epod_total }}</span></h2>
+  {% if o.epod %}<a class="btn" href="{{ o.epod }}" target="_blank" rel="noopener">Deschide ePOD-ul DSV</a>
+  {% else %}<p class="muted small">Linkul ePOD nu apare în comandă.</p>{% endif %}
+  {% for key, label in steps %}
+  <form method="post" style="margin:0">
+    <input type="hidden" name="action" value="epod"><input type="hidden" name="step" value="{{ key }}">
+    <button type="submit" class="step {{ 'done' if (o.epod_steps or {}).get(key) }}" aria-pressed="{{ 'true' if (o.epod_steps or {}).get(key) else 'false' }}">
+      <span class="dot" aria-hidden="true">{% if (o.epod_steps or {}).get(key) %}✓{% endif %}</span>{{ label }}
+      {% if (o.epod_steps or {}).get(key) %}<small>{{ o.epod_steps[key][8:10] }}.{{ o.epod_steps[key][5:7] }}</small>{% endif %}
+    </button>
+  </form>
+  {% endfor %}
+</section>
+
+<section class="section" id="docs_sent">
+  <h2>Documente originale <span class="chip {{ st.docs[0] }}">{{ st.docs[1] }}</span></h2>
+  {% if st.deadline %}<p class="muted small" style="margin:0">Trebuie să ajungă la DSV în {{ 10 if o.international else 5 }} zile lucrătoare de la descărcare: până pe <b>{{ st.deadline.strftime('%d.%m.%Y') }}</b>.</p>{% endif %}
+  <form method="post" class="inline">
+    <input type="hidden" name="action" value="docs_sent">
+    <input type="date" name="value" value="{{ o.docs_sent or today }}" aria-label="Data trimiterii documentelor">
+    <button type="submit" class="primary">{{ 'Schimbă data' if o.docs_sent else 'Am trimis documentele' }}</button>
+  </form>
+  {% if o.docs_sent %}<form method="post" style="margin:0"><input type="hidden" name="action" value="docs_sent"><input type="hidden" name="value" value=""><button type="submit">Anulează (nu sunt trimise)</button></form>{% endif %}
+</section>
+
+<section class="section" id="paid">
+  <h2>Plată <span class="chip {{ st.pay[0] }}">{{ st.pay[1] }}</span></h2>
+  {% if st.due %}<p class="muted small" style="margin:0">45 de zile de la primirea documentelor: în jur de <b>{{ st.due.strftime('%d.%m.%Y') }}</b> (socotit de la trimiterea lor).</p>{% endif %}
+  <form method="post" class="inline">
+    <input type="hidden" name="action" value="paid">
+    <input type="date" name="value" value="{{ o.paid or today }}" aria-label="Data încasării">
+    <button type="submit" class="primary">{{ 'Schimbă data' if o.paid else 'Încasat' }}</button>
+  </form>
+  {% if o.paid %}<form method="post" style="margin:0"><input type="hidden" name="action" value="paid"><input type="hidden" name="value" value=""><button type="submit">Anulează (neîncasat)</button></form>{% endif %}
+</section>
+
+{% if o.toll_ro %}
+<section class="section" id="toll_amount">
+  <h2>Toll_RO de facturat</h2>
+  <form method="post" class="inline">
+    <input type="hidden" name="action" value="toll_amount">
+    <input type="text" name="value" inputmode="decimal" value="{{ ('%.2f'|format(o.toll_amount)).replace('.', ',') if o.toll_amount else '' }}" placeholder="ex. 245,50" aria-label="Suma Toll_RO">
+    <span class="muted">{{ o.currency or 'RON' }}</span>
+    <button type="submit">Salvează</button>
+  </form>
+  <p class="muted small" style="margin:0">Apare ca rând separat în datele de facturare.</p>
+</section>
+{% endif %}
+
+<section class="section">
+  <h2>Detalii</h2>
+  <dl class="kv">
+    <dt>Încărcare</dt><dd>{{ o.loading or '—' }}{% if o.loading_date %}<br><span class="muted small">{{ o.loading_date[8:10] }}.{{ o.loading_date[5:7] }}.{{ o.loading_date[:4] }}</span>{% endif %}</dd>
+    <dt>Descărcare</dt><dd>{{ o.unloading or '—' }}{% if o.unloading_date %}<br><span class="muted small">{{ o.unloading_date[8:10] }}.{{ o.unloading_date[5:7] }}.{{ o.unloading_date[:4] }}</span>{% endif %}</dd>
+    <dt>Camion</dt><dd>{{ o.truck or '—' }}</dd>
+    <dt>Marfă</dt><dd>{{ o.goods or '—' }}{% if o.weight_kg %} · {{ '{:,.0f}'.format(o.weight_kg).replace(',', '.') }} kg{% endif %}{% if o.ldm %} · {{ o.ldm }} LDM{% endif %}</dd>
+    <dt>Ref. DSV</dt><dd>{{ o.dsv_ref or '—' }}</dd>
+    <dt>Ref. client</dt><dd>{{ o.client_ref or '—' }}</dd>
+    <dt>Contact</dt><dd>{{ o.contact or '—' }}</dd>
+    <dt>Trimisă</dt><dd>{{ o.sent_at[8:10] }}.{{ o.sent_at[5:7] }}.{{ o.sent_at[:4] }}{% if o.sent_by %} · {{ o.sent_by }}{% endif %}</dd>
+  </dl>
+  <a class="btn" href="{{ url_for('search', nr=o.order_no) if has_view('search') else '#' }}">Găsește PDF-ul în mail</a>
+</section>
+
+{% if o.history %}
+<section class="section">
+  <h2>Modificări de la DSV</h2>
+  {% for h in o.history|reverse %}
+  <div><b>{{ h.at[8:10] }}.{{ h.at[5:7] }} · versiunea {{ h.version }}</b>
+    <ul class="small" style="margin:4px 0 0;padding-left:18px">{% for label, a, b in h.changes %}<li>{{ label }}: {{ a or '—' }} → <b>{{ b or '—' }}</b></li>{% endfor %}</ul></div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="section" id="note">
+  <h2>Notă</h2>
+  <form method="post" style="display:flex;flex-direction:column;gap:8px;margin:0">
+    <input type="hidden" name="action" value="note">
+    <textarea name="value" rows="3" aria-label="Notă" style="font:inherit;font-size:max(16px,1rem);padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)">{{ o.note or '' }}</textarea>
+    <button type="submit">Salvează nota</button>
+  </form>
+</section>
+{% endblock %}

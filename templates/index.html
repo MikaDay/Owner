@@ -18,6 +18,11 @@
 </a>
 {% endif %}
 
+{% if mail_ready %}
+{# Rezumatul zilei, din registru — se încarcă după ce s-a deschis pagina. #}
+<section id="today" class="cards" hidden aria-label="Ce e de făcut"></section>
+{% endif %}
+
 <form class="upload" method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" id="up">
   <input type="file" name="pdf" id="pdf" accept="application/pdf,.pdf" multiple>
   <label for="pdf" class="pick" id="pick">
@@ -72,6 +77,39 @@
 {% endif %}
 
 <script>
+(async () => {
+  const box = document.getElementById("today");
+  if (!box) return;
+  try {
+    const r = await fetch("{{ url_for('summary_api') }}", { cache: "no-store" });
+    if (!r.ok) return;
+    const s = await r.json();
+    if (!s.orders) return;
+    const card = (n, text, href, late, wide) => {
+      const a = document.createElement("a");
+      a.className = "card" + (late ? " late" : "") + (wide ? " wide" : "");
+      a.href = href;
+      const b = document.createElement("b"); b.textContent = n;
+      const span = document.createElement("span"); span.textContent = text;
+      a.append(b, span);
+      return a;
+    };
+    const orders = "{{ url_for('orders', f='todo') }}";
+    const cards = [
+      card(s.docs_due, s.docs_late ? `documente de trimis · ${s.docs_late} întârziate` : "documente de trimis", orders, s.docs_late),
+      card(s.epod_open, "ePOD de completat", orders),
+    ];
+    if (s.unpaid) cards.push(card(s.overdue || s.unpaid, s.overdue ? "plăți restante" : "de încasat", orders, !!s.overdue, true));
+    if (s.loading_soon.length) {
+      const text = s.loading_soon.map((o) => `${o.no} ${o.route}${o.truck ? " · " + o.truck : ""}`).join("\n");
+      const c = card(s.loading_soon.length, "încărcări azi și mâine", orders, false, true);
+      c.title = text;
+      cards.push(c);
+    }
+    box.replaceChildren(...cards);
+    box.hidden = false;
+  } catch (e) { /* rezumatul e opțional */ }
+})();
 (() => {
   const sf = document.getElementById("search");
   if (sf) oncePerSubmit(sf, "Se caută în mail…");

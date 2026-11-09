@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Comenzi · Cirforvest{% endblock %}
+{% block body %}
+<div class="top">
+  <div><div class="label">Registru</div><h1>Comenzi</h1></div>
+</div>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+
+{% if not empty %}
+<div class="cards">
+  <a class="card {{ 'late' if summary.docs_late }}" href="{{ url_for('orders', f='todo') }}">
+    <b>{{ summary.docs_due }}</b><span>documente de trimis{% if summary.docs_late %} · {{ summary.docs_late }} întârziate{% endif %}</span></a>
+  <a class="card" href="{{ url_for('orders', f='todo') }}"><b>{{ summary.epod_open }}</b><span>ePOD de completat</span></a>
+  <div class="card wide {{ 'late' if summary.overdue }}"><b style="font-size:1.1rem">{{ money(summary.unpaid) if summary.unpaid else '—' }}</b>
+    <span>de încasat{% if summary.overdue %} · restant {{ money(summary.overdue) }}{% endif %}</span></div>
+</div>
+{% endif %}
+
+<form method="get" class="searchrow" role="search">
+  <input type="hidden" name="f" value="{{ show }}">
+  <input type="search" name="q" value="{{ q }}" placeholder="Nr. comandă, oraș, camion" aria-label="Caută în comenzi"
+         style="font-size:max(16px,1rem);min-height:44px;border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--surface);color:var(--fg)">
+  <button type="submit">Caută</button>
+</form>
+
+<div class="seg" role="group" aria-label="Arată">
+  <a class="segl" href="{{ url_for('orders', f='todo', q=q) }}" aria-pressed="{{ 'true' if show == 'todo' else 'false' }}">De făcut</a>
+  <a class="segl" href="{{ url_for('orders', f='all', q=q) }}" aria-pressed="{{ 'true' if show == 'all' else 'false' }}">Toate</a>
+</div>
+
+{% if empty %}
+  <div class="section">
+    <h2>Registrul e gol</h2>
+    <p class="muted">Comenzile intră aici singure la fiecare „Trimite pe mail”. Poți aduce acum și comenzile mai vechi din mail, ca să le urmărești termenele și plățile (mailurile rămân cum sunt).</p>
+    <form method="post" action="{{ url_for('orders_import') }}" class="inline" id="importform">
+      <label class="muted small" for="days">Din ultimele</label>
+      <input type="number" id="days" name="days" value="60" min="1" max="180" style="width:90px" inputmode="numeric">
+      <span class="muted small">zile</span>
+      <button class="primary" type="submit">Adaugă din mail</button>
+    </form>
+  </div>
+{% elif not rows %}
+  <p class="muted">{% if q %}Nicio comandă pentru „{{ q }}”.{% else %}Nimic de făcut: toate comenzile au ePOD-ul complet, documentele trimise și plata încasată.{% endif %}</p>
+{% endif %}
+
+<div class="list">
+{% for o, st in rows %}
+  <a class="orow" href="{{ url_for('order', no=o.order_no) }}">
+    <div class="t"><b>{{ o.order_no }}</b><span>{{ (o.loading_date or '')[8:10] }}.{{ (o.loading_date or '')[5:7] }} · {{ o.truck or '—' }}</span></div>
+    <div>{{ route(o) }}{% if o.price %} · {{ money({o.currency or 'RON': o.price}) }}{% endif %}</div>
+    <div class="chips">
+      {% if o.toll_ro %}<span class="chip todo">Toll_RO</span>{% endif %}
+      <span class="chip {{ 'ok' if st.epod_done == st.epod_total else 'todo' }}">ePOD {{ st.epod_done }}/{{ st.epod_total }}</span>
+      <span class="chip {{ st.docs[0] }}">{{ st.docs[1] }}</span>
+      <span class="chip {{ st.pay[0] }}">{{ st.pay[1] }}</span>
+      {% if o.history %}<span class="chip soon">Modificată (v{{ o.version }})</span>{% endif %}
+    </div>
+  </a>
+{% endfor %}
+</div>
+
+{% if not empty %}
+<details class="muted small">
+  <summary>Adaugă comenzi mai vechi din mail</summary>
+  <form method="post" action="{{ url_for('orders_import') }}" class="inline" id="importform2">
+    <label for="days2">Din ultimele</label>
+    <input type="number" id="days2" name="days" value="60" min="1" max="180" style="width:90px" inputmode="numeric">
+    <span>zile</span>
+    <button type="submit">Adaugă</button>
+  </form>
+  <p>Comenzile deja din registru nu se schimbă; mailurile rămân citite sau necitite cum erau.</p>
+</details>
+{% endif %}
+<script>
+document.querySelectorAll("#importform, #importform2").forEach((f) => oncePerSubmit(f, "Se caută comenzile în mail…"));
+</script>
+{% endblock %}

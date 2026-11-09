@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Rapoarte · Cirforvest{% endblock %}
+{% block body %}
+<div class="top">
+  <div><div class="label">Registru · {{ year }}</div><h1>Rapoarte</h1></div>
+  <div class="inline">{% if year > 2020 %}<a href="{{ url_for('reports', an=year-1) }}" aria-label="Anul anterior">‹ {{ year-1 }}</a>{% endif %}<a href="{{ url_for('reports', an=year+1) }}" aria-label="Anul următor">{{ year+1 }} ›</a></div>
+</div>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+
+<div class="cards">
+  <div class="card"><b>{{ total }}</b><span>comenzi în {{ year }}</span></div>
+  <div class="card"><b>{{ toll }}</b><span>cu Toll_RO</span></div>
+  <div class="card wide {{ 'late' if overdue }}"><b style="font-size:1.1rem">{{ money(unpaid) if unpaid else '—' }}</b><span>de încasat acum{% if overdue %} · restant {{ money(overdue) }}{% endif %}</span></div>
+  <div class="card"><b>{{ doc_delay if doc_delay is not none else '—' }}</b><span>zile până trimiți documentele (medie)</span></div>
+  <div class="card"><b>{{ pay_delay if pay_delay is not none else '—' }}</b><span>zile de la documente la încasare (medie)</span></div>
+</div>
+
+<section class="section">
+  <h2>Descarcă</h2>
+  <form method="get" class="inline" action="{{ url_for('register_xlsx') }}" id="period">
+    <label class="muted small" for="de">De la</label><input type="date" id="de" name="de" value="{{ month_start }}">
+    <label class="muted small" for="pana">până la</label><input type="date" id="pana" name="pana" value="{{ today }}">
+  </form>
+  <div class="inline">
+    <button type="submit" form="period" class="primary">Registru Excel</button>
+    <button type="submit" form="period" formaction="{{ url_for('invoicing_csv') }}">Date pentru facturare (CSV)</button>
+  </div>
+  <p class="muted small" style="margin:0">Facturare: un rând pe comandă, cu numărul comenzii pentru câmpul BT-10 din e-Factura, plus un rând pentru Toll_RO acolo unde ai trecut suma.</p>
+</section>
+
+<section class="section">
+  <h2>Pe luni</h2>
+  {% if months %}<div class="scroll"><table class="t"><thead><tr><th>Luna</th><th>Comenzi</th><th>Total</th><th>Toll_RO</th></tr></thead><tbody>
+  {% for m, n, tot, t in months %}<tr><td>{{ m[5:7] }}.{{ m[:4] }}</td><td>{{ n }}</td><td>{{ money(tot) }}</td><td>{{ t }}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">Nicio comandă în {{ year }}.</p>{% endif %}
+</section>
+
+<section class="section">
+  <h2>Pe camion</h2>
+  {% if trucks %}<div class="scroll"><table class="t"><thead><tr><th>Camion</th><th>Comenzi</th><th>Total</th></tr></thead><tbody>
+  {% for tr, n, tot in trucks %}<tr><td>{{ tr }}</td><td>{{ n }}</td><td>{{ money(tot) }}</td></tr>{% endfor %}
+  </tbody></table></div>{% endif %}
+</section>
+
+<section class="section">
+  <h2>Prețuri pe traseu</h2>
+  {% if routes %}<div class="scroll"><table class="t"><thead><tr><th>Traseu</th><th>Curse</th><th>Ultimul preț</th><th>Min–max</th></tr></thead><tbody>
+  {% for r in routes %}<tr><td>{{ r.route }}</td><td>{{ r.count }}</td><td>{{ money({r.cur: r.last}) }}<br><span class="muted small">{{ r.last_date.strftime('%d.%m') }}</span></td>
+    <td>{% if r.min != r.max %}{{ money({r.cur: r.min}) }} – {{ money({r.cur: r.max}) }}{% else %}—{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% endif %}
+</section>
+{% endblock %}

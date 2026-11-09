@@ -26,7 +26,9 @@ from flask import (Flask, abort, redirect, render_template, request, send_file,
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from mailbox_client import Mailbox
+import journal
+import registry
+from mailbox_client import Mailbox, record_download, state_from_journal
 from process_pdf import analyse, merge, safe_filename
 from new_orders import RO, describe, pick_new, when
 from transport_order import build_register, is_transport_order, parse_order
@@ -56,6 +58,7 @@ LAST = int(os.environ.get("LAST_PAGES", "3"))
 EXPECTED_PAGES = int(os.environ.get("EXPECTED_PAGES", "6"))
 NEW_ORDERS_DAYS = int(os.environ.get("NEW_ORDERS_DAYS", "45"))   # cât de departe caută „Comenzi noi”
 SITE_PASSWORD = os.environ.get("SITE_PASSWORD", "")
+journal.configure(lambda: Mailbox(**MAIL))
 STATE = Path(os.environ.get("DATA_DIR", ".")) / "downloaded.json"
 
 
@@ -143,6 +146,11 @@ def _login_failed():
     _attempts(update=[_client_ip(), time.time()])
 
 
+@app.context_processor
+def _template_helpers():
+    return {"has_view": lambda name: name in app.view_functions}
+
+
 @app.route("/manifest.webmanifest")
 def manifest():
     """Descrierea aplicației pentru „Adaugă pe ecranul principal” (iconiță, deschidere fără bara browserului)."""
@@ -203,7 +211,7 @@ def index():
             with Mailbox(**MAIL) as mb:
                 messages = mb.list_messages(days=days, sender=sender, subject=subject)
                 try:
-                    seen |= set(mb.load_state()["downloaded"])
+                    seen |= set(state_from_journal(journal.read(mb=mb))["downloaded"])
                 except Exception as e:
                     app.logger.warning("Nu am putut citi jurnalul descărcărilor: %s", e)
         except Exception as e:
@@ -212,7 +220,7 @@ def index():
             m["downloaded"] = m["message_id"] in seen
     return render_template("index.html", messages=messages, searched=searched, error=error,
                            days=days, sender=sender, subject=subject, copies=COPIES, last=LAST,
-                           account=MAIL["user"], mail_ready=mail_ready, default_from=DEFAULT_FROM)
+                           account=MAIL["user"], mail_ready=mail_ready, default_from=DEFAULT_FROM, tab="acasa")
 
 
 def _jobs_dir():
@@ -264,8 +272,7 @@ def new_orders_start():
         day = datetime.now(RO).date()
     start = datetime.combine(day, datetime.min.time(), RO)   # începutul zilei alese
     try:
-        with Mailbox(**MAIL) as mb:
-            mb.save_download([], when=start)
+        journal.update(lambda raw: record_download(raw, [], when=start))
     except Exception as e:
         return render_template("message.html", title="Nu am putut salva data", text=_friendly_error(e))
     return redirect(url_for("new_orders"))
@@ -286,7 +293,7 @@ def new_orders():
         with Mailbox(**MAIL) as mb:
             _set_status(path, phase="Se caută comenzile noi în mail…")
             try:
-                state = mb.load_state()
+                state = state_from_journal(journal.read(fresh=True, mb=mb))
             except Exception as e:
                 app.logger.warning("Nu am putut citi jurnalul descărcărilor: %s", e)
                 state = {"last_download": None, "downloaded": {}}
@@ -381,7 +388,7 @@ def result(token):
     st = json.loads((_status_path(token) / "status.json").read_text(encoding="utf-8"))
     last = st.get("last_date")
     return render_template("message.html", title=st.get("title", ""), text=st.get("text", ""),
-                           back=url_for("index"), start_form=st.get("start_form"),
+                           back=st.get("back") or url_for("index"), start_form=st.get("start_form"),
                            last_date=date.fromisoformat(last) if last else None)
 
 
@@ -661,23 +668,33 @@ def _send_by_mail(path, items, chosen, names, token):
                                text=(f"Trimise: {'; '.join(sent)}. " if sent else "") + _friendly_error(e),
                                back=url_for("review", token=token))
     _mark_downloaded([items[i]["message_id"] for i in chosen])
-    _record_download([items[i].get("uid") for i in chosen], [items[i]["message_id"] for i in chosen])
+    _record_download([items[i] for i in chosen])
     return render_template("message.html", title="Trimis pe mail",
                            text=f"Am pus {len(sent)} {'mail' if len(sent) == 1 else 'mailuri'} în Inbox la "
                                 f"{MAIL['user']}: " + "; ".join(sent) + ".",
                            back=url_for("review", token=token))
 
 
-def _record_download(uids, message_ids):
-    """După descărcare: comenzile intră în jurnalul din mail (cu data descărcării), iar
-    mailurile devin „citite”. O eroare aici nu trebuie să oprească descărcarea."""
-    uids, message_ids = [u for u in uids if u], [m for m in message_ids if m]
-    if not uids or not (MAIL["user"] and MAIL["password"]):
+def _record_download(items):
+    """După trimitere: comenzile intră în registru și în jurnal (cu data descărcării), iar mailurile
+    devin „citite”. O eroare aici nu trebuie să oprească trimiterea."""
+    if not (MAIL["user"] and MAIL["password"]):
         return
+    uids = [it.get("uid") for it in items if it.get("uid")]
+    message_ids = [it["message_id"] for it in items if it.get("message_id")]
+    details = [it.get("details") or {} for it in items]
+    user = session.get("user", "")
+
+    def change(raw):
+        raw = record_download(raw, message_ids)
+        registry.upsert(raw, details, user=user)
+        return registry.add_send(raw, [d.get("order_no") for d in details if d.get("order_no")],
+                                 sum(1 for d in details if d.get("toll_ro")), user=user)
     try:
         with Mailbox(**MAIL) as mb:
-            mb.save_download(message_ids)
-            mb.mark_read(uids)
+            journal.update(change, mb=mb)
+            if uids:
+                mb.mark_read(uids)
     except Exception as e:
         app.logger.warning("Nu am putut nota descărcarea în mail: %s", e)
 
@@ -691,6 +708,8 @@ def _friendly_error(e):
                 f"({where}), nu parola obișnuită.")
     return f"Eroare: {text}"
 
+
+import views_orders  # noqa: E402,F401  (paginile registrului; au nevoie de app și de funcțiile de mai sus)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8000")), debug=False)

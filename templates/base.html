@@ -76,6 +76,10 @@ button:active:not(:disabled), .btn:active, .newbtn:active { transform: scale(0.9
 .seg button { flex: 1; min-height: 40px; padding: 6px 8px; border: 0; border-radius: 7px; background: transparent;
   color: var(--fg); font-weight: 600; font-size: 0.88rem; position: relative; }
 .seg button::after { content: ""; position: absolute; inset: -2px 0; }   /* zona de apăsare: 44 pt */
+.seg .segl { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 40px; border-radius: 7px;
+  color: var(--fg); text-decoration: none; font-weight: 600; font-size: 0.88rem; position: relative; }
+.seg .segl::after { content: ""; position: absolute; inset: -2px 0; }
+.seg .segl[aria-pressed="true"] { background: var(--seg-on); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
 .seg button[aria-pressed="true"] { background: var(--seg-on); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
 .pages { display: flex; gap: 5px; align-items: center; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); flex-wrap: wrap; }
 .pg { width: 22px; height: 30px; border-radius: 3px; display: grid; place-items: center; border: 1.5px solid var(--tc); color: var(--tc); }
@@ -157,6 +161,56 @@ h2.group span { font-family: var(--mono); font-size: 0.75rem; color: var(--muted
 .sheet strong { font-size: 1.15rem; }
 .sheet p { margin: 0; }
 @media (prefers-reduced-motion: no-preference) { .sheet { animation: up .2s ease-out; } @keyframes up { from { transform: translateY(40px); opacity: 0; } } }
+/* Bara de tab-uri de jos (navigarea principală). Bara de acțiuni (.bar) stă deasupra ei. */
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; display: flex; justify-content: center;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding: 4px max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+.tabs a { flex: 0 1 120px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 48px;
+  justify-content: center; color: var(--muted); text-decoration: none; font-size: 0.68rem; font-weight: 600; }
+.tabs a svg { width: 24px; height: 24px; fill: currentColor; }
+.tabs a[aria-current="page"] { color: var(--tc); }
+body.has-tabs .wrap { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+body.has-tabs .bar { bottom: calc(57px + env(safe-area-inset-bottom)); padding-bottom: 12px; }
+/* Registru: rânduri, etichete de stare, carduri de rezumat. */
+.cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: var(--fg); min-height: 44px; }
+.card b { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+.card span { font-size: 0.82rem; color: var(--muted); }
+.card.late { border-color: var(--err); }
+.card.late b { color: var(--err); }
+.card.wide { grid-column: span 2; }
+.orow { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--line);
+  text-decoration: none; color: var(--fg); min-height: 44px; }
+.orow .t { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.orow .t b { font-family: var(--mono); font-size: 0.95rem; }
+.orow .t span { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.chip.ok { border-color: var(--ok); color: var(--ok); }
+.chip.late { border-color: var(--err); color: var(--err); font-weight: 700; }
+.chip.soon { border-color: var(--warn); color: var(--warn); font-weight: 600; }
+.chip.todo { border-color: var(--tc); color: var(--tc); }
+.searchrow { display: flex; gap: 8px; }
+.searchrow input { flex: 1; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
+.kv dt { color: var(--muted); font-size: 0.85rem; }
+.kv dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+.section { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--surface); }
+.section h2 { font-size: 1rem; margin: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0; }
+.inline input[type=date], .inline input[type=text], .inline input[type=month] { flex: 1 1 150px; width: auto; }
+input[type=date], input[type=month] { font: inherit; font-size: max(16px, 1rem); color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 10px; min-height: 44px; }
+.step { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font-weight: 600; }
+.step .dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: grid; place-items: center; }
+.step.done .dot { background: var(--ok); border-color: var(--ok); color: #fff; }
+.step small { margin-left: auto; color: var(--muted); font-weight: 400; }
+table.t { width: 100%; border-collapse: collapse; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+table.t th, table.t td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.t th { color: var(--muted); font-weight: 600; font-size: 0.78rem; }
+.scroll { overflow-x: auto; }
 .wait { position: fixed; inset: 0; z-index: 30; background: rgba(20, 25, 23, 0.9); color: #fff; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 24px; }
 .wait[hidden] { display: none; }
@@ -191,10 +245,29 @@ window.oncePerSubmit = (form, text) => form.addEventListener("submit", (e) => {
 });
 </script>
 </head>
-<body>
+<body class="{{ 'has-tabs' if tab else '' }}">
 <div class="wrap">
 {% block body %}{% endblock %}
 </div>
+{% if tab %}
+{# Bara de tab-uri (navigarea principală, ca în iOS): doar pe paginile de nivel întâi. #}
+<nav class="tabs" aria-label="Navigare">
+  <a href="{{ url_for('index') }}" {% if tab == 'acasa' %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+    <span>Acasă</span></a>
+  <a href="{{ url_for('orders') }}" {% if tab == 'comenzi' %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm2 7v2h8v-2zm0 4v2h8v-2zm0-8v2h5V6z"/></svg>
+    <span>Comenzi</span></a>
+  <a href="{{ url_for('reports') }}" {% if tab == 'rapoarte' %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10h3v10zm6.5 0V4h3v16zM17 20v-7h3v7z"/></svg>
+    <span>Rapoarte</span></a>
+  {% if has_view('settings') %}
+  <a href="{{ url_for('settings') }}" {% if tab == 'setari' %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.4 2-.1-.6 1.6-1.5-2-3.4-2.1.6a7.6 7.6 0 0 0-1-.6L16.3 3h-3.9l-.5 2a7.6 7.6 0 0 0-1 .6l-2.1-.6-2 3.4 1.6 1.5a7.3 7.3 0 0 0 0 1.2l-1.6 1.5 2 3.4 2.1-.6c.3.2.6.4 1 .6l.5 2h3.9l.5-2c.4-.2.7-.4 1-.6l2.1.6 2-3.4-1.6-1.5z"/></svg>
+    <span>Setări</span></a>
+  {% endif %}
+</nav>
+{% endif %}
 <div class="wait" id="wait" hidden role="status" aria-live="polite">
   <div class="spin" aria-hidden="true"></div>
   <strong id="waittext">Se lucrează…</strong>
