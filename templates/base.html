@@ -169,7 +169,7 @@ h2.group span { font-family: var(--mono); font-size: 0.75rem; color: var(--muted
 .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; display: flex; justify-content: center;
   background: var(--surface); border-top: 1px solid var(--line);
   padding: 4px max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
-.tabs a { flex: 0 1 120px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 48px;
+.tabs a { flex: 1 1 0; max-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 48px;
   justify-content: center; color: var(--muted); text-decoration: none; font-size: 0.68rem; font-weight: 600; }
 .tabs a svg { width: 24px; height: 24px; fill: currentColor; }
 .tabs a[aria-current="page"] { color: var(--tc); }
@@ -265,6 +265,9 @@ window.oncePerSubmit = (form, text) => form.addEventListener("submit", (e) => {
   <a href="{{ url_for('orders') }}" {% if tab == 'comenzi' %}aria-current="page"{% endif %}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm2 7v2h8v-2zm0 4v2h8v-2zm0-8v2h5V6z"/></svg>
     <span>Comenzi</span></a>
+  <a href="{{ url_for('invoices_page') }}" {% if tab == 'facturi' %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21zm3 5v2h8V8zm0 4v2h8v-2z"/></svg>
+    <span>Facturi</span></a>
   <a href="{{ url_for('reports') }}" {% if tab == 'rapoarte' %}aria-current="page"{% endif %}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10h3v10zm6.5 0V4h3v16zM17 20v-7h3v7z"/></svg>
     <span>Rapoarte</span></a>

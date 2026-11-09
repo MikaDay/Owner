@@ -1,0 +1,73 @@
+"""Texte ca cele din documentele reale (extras BCR, situația DSV, desfășurător RoToll), cu date inventate."""
+
+BCR = """BANCA COMERCIALA ROMANA S.A.
+EXTRAS DE CONT Nr. 15 din data: 15-10-2026
+Titular: CIRFORVEST SRL CIC: 935142 CUI/CNP: 17204455
+Data: 01-09-2026 Sold contabil initial: 117.559,45
+01-09-2026 20:09 Tranzactie efectuata prin George Banking BCR Referinta 260901S301334424, data
+valutei 01-09-2026, Plata Instant -Platitor: CIRFORVEST SRL;
+RO42RNCB0250009351420001; CODFISC 17204455; BCR TIMIS LUGOJ-
+Beneficiar: SC SMART DIESEL SRL; RO32INGB0016000039888911-Detalii:
+Alimentare card combustibil
+2026090111509358
+Ordin de plata
+01.09.2026
+0,0010.000,00
+08-09-2026 10:26 Referinta 260908S508904681, data valutei 08-09-2026, Decontare -Platitor: DSV
+ROAD SRL; RO80INGB5001008832778910; CODFISC 46318372-Beneficiar:
+CIRFORVEST SRL; RO42RNCB0250009351420001-Detalii: /ROC/DSV Invoice
+CIR2018/CIR20
+21///RFB/
+2026090843291943
+Ordin de plata
+0033019556
+08.09.2026
+5.929,000,00
+Tranzactii finalizate: 0,00 5.929,00
+"""
+
+DSV_LIST = """Facturi CIRFORVEST – sortate după dată și număr
+Nr. factură Data factură Sumă Monedă Scadență Nr. document
+CIR2018 25.08.2026 -2,904.00 RON 24.09.2026 80019001 08.09.2026 33019556 BRAS3 0809 6412069611
+CIR2021 25.08.2026 -3,025.00 RON 24.09.2026 80019002 08.09.2026 33019556 BRAS3 0809 6412069611
+CIR2105R 17.09.2026 -3,025.00 RON 17.10.2026
+CIR2132 25.09.2026 -2,783.00 RON 25.10.2026 27080700
+Total -11,737.00
+Numere CIR care nu apar în situația DSV
+Nr. factură Emisă după data Emisă până la data Status la noi
+CIR2095 08.09.2026 10.09.2026
+CIR2096 08.09.2026 10.09.2026
+Plăți și compensări – sortate după dată și număr
+33019556 08.09.2026 5,929.00 RON 20260908 6412069611 CIRFORVEST SRL
+"""
+
+TOLL = """Desfășurător
+Vehicul
+NUMĂR DE ÎNMATRICULARE
+TM12YEC
+SERIE ȘASIU
+YV2AG30A4EB683722
+Remorci
+NUMĂR REMORCĂ
+TM20DGU
+Sesiune
+DATĂ DE ÎNCEPUT
+30.09.2026 03:29
+DATĂ DE FINAL
+30.09.2026 13:26
+ORIGINE
+Depozit Altex, Dragomiresti Deal, Ilfov, 077096,
+România
+DESTINAȚIE
+Strada Arnold Hauser, Timișoara, Timiș, 300633, România
+SERIE UNICĂ A TRANZACȚIEI
+CONSUM-a36e7e7e6be34f37a0561c8aaf5df03f
+DISTANȚĂ TARIFABILĂ PARCURSĂ (KM)
+551.00
+PREȚ TOTAL, FĂRĂ TVA (RON)
+207.17
+TVA TOTAL (RON)
+43.50
+PREȚ TOTAL, INCLUSIV TVA (RON)
+250.67
+"""

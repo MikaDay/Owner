@@ -21,13 +21,19 @@ fake_imap.install()
 import web_app  # noqa: E402
 
 
+_REAL_THREAD = web_app.threading.Thread
+
+
 class _RunNow:
     """Pregătirile „din fundal” rulează imediat în teste."""
     def __init__(self, target=None, daemon=None, **_):
         self.target = target
 
     def start(self):
-        self.target()
+        # Într-un fir adevărat, ca în producție: fără contextul cererii (url_for ar eșua).
+        t = _REAL_THREAD(target=self.target)
+        t.start()
+        t.join()
 
 
 @pytest.fixture(autouse=True)

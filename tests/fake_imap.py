@@ -93,6 +93,14 @@ class FakeIMAP:
                 SERVER.flags[(self.cur, uid)].add(flag)
             return "OK", [b""]
         out = []
+        if "BODYSTRUCTURE" in args[1]:
+            import email as _email
+            for uid in ids.split(b","):
+                names = [p.get_filename() for p in _email.message_from_bytes(box[uid]).walk() if p.get_filename()]
+                parts = b" ".join(b'("application" "pdf" ("name" "%s") NIL NIL "base64" 1000 NIL ("attachment" ("filename" "%s")))'
+                                  % (n.encode(), n.encode()) for n in names)
+                out.append(b"1 (UID %s BODYSTRUCTURE (%s \"mixed\"))" % (uid, parts))
+            return "OK", out
         for uid in ids.split(b","):
             raw = box[uid]
             body = raw.split(b"\n\n")[0] if "HEADER" in args[1] else raw

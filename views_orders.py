@@ -126,7 +126,9 @@ def order(no):
                                    back=url_for("orders"))
         abort(404)
     st = registry.status(o, _today())
+    from views_finance import order_invoice_context
     return render_template("order.html", o=o, st=st, steps=registry.EPOD_STEPS, route=_route(o),
+                           **order_invoice_context(raw, o),
                            today=_today().isoformat(), money=registry.money, pretty=registry.pretty, tab="comenzi")
 
 
@@ -137,7 +139,12 @@ def summary_api():
     if error:
         return jsonify({"error": error}), 503
     s = registry.summary(raw, _today())
+    import finance
+    late = [i for i in (raw.get("invoices") or {}).values() if finance.invoice_status(i, _today()) == "late"]
+    missing = sum(1 for i in (raw.get("invoices") or {}).values() if finance.invoice_status(i, _today()) == "missing")
     return jsonify({
+        "invoices_late": len(late), "invoices_late_sum": registry.money({"RON": sum(i.get("amount") or 0 for i in late)}) if late else "",
+        "invoices_missing": missing,
         "orders": s["orders"], "docs_due": s["docs_due"], "docs_late": s["docs_late"], "epod_open": s["epod_open"],
         "unpaid": registry.money(s["unpaid"]) if s["unpaid"] else "", "overdue": registry.money(s["overdue"]) if s["overdue"] else "",
         "loading_soon": [{"no": o["order_no"], "route": _route(o), "date": o.get("loading_date"), "truck": o.get("truck")}
@@ -154,6 +161,7 @@ def orders_import():
     sau descărcate) — ca termenele și plățile să poată fi urmărite și pentru ce s-a printat înainte."""
     days = max(1, min(180, request.form.get("days", 60, type=int)))
     user = session.get("user", "")
+    back = url_for("orders")
 
     def work(path):
         found_details = []
@@ -183,7 +191,7 @@ def orders_import():
         added = len(set(raw.get("orders") or {}) - before)
         return [], (f"Am adăugat {added} {'comandă' if added == 1 else 'comenzi'} din ultimele {days} de zile în "
                     "registru. Mailurile au rămas cum erau (citite sau necitite)."), \
-            {"title": "Registru actualizat", "back": url_for("orders")}
+            {"title": "Registru actualizat", "back": back}
 
     return redirect(url_for("progress", token=_start_job(work, "Se caută comenzile în mail…")))
 

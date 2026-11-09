@@ -195,6 +195,26 @@ class Mailbox:
         if typ != "OK":
             raise RuntimeError(f"Yahoo nu a acceptat mailul: {data}")
 
+    def attachment_names(self, uids):
+        """{uid: [nume fișiere]} fără să descarce mailurile (doar structura lor, BODYSTRUCTURE)."""
+        uids = [str(u).encode() if not isinstance(u, bytes) else u for u in uids]
+        out = {}
+        for i in range(0, len(uids), 50):
+            typ, data = self.imap.uid("FETCH", b",".join(uids[i:i + 50]), "(UID BODYSTRUCTURE)")
+            if typ != "OK":
+                continue
+            current = None
+            for item in data:
+                chunk = b"".join(x for x in (item if isinstance(item, tuple) else (item,)) if isinstance(x, bytes))
+                m = re.search(rb"UID (\d+)", chunk)
+                if m:
+                    current = m.group(1).decode()
+                    out.setdefault(current, [])
+                if current:
+                    for name in re.findall(rb'"(?:name|filename)" "([^"]+)"', chunk, re.I):
+                        out[current].append(_decode(name.decode("utf-8", "replace")))
+        return out
+
     def read_message(self, uid):
         """Un mail întreg, pentru afișare: antete, textul și toate atașamentele (fără să-l marcheze citit)."""
         typ, data = self.imap.uid("FETCH", str(uid).encode(), "(BODY.PEEK[])")

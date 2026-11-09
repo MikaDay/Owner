@@ -55,8 +55,13 @@ def monthly_report(start, end):
     return len(rows)
 
 
+def finance_scan():
+    from views_finance import scan_mail
+    return scan_mail()
+
+
 HOOKS = {"mailbox": lambda: Mailbox(**MAIL), "days": NEW_ORDERS_DAYS, "sender": DEFAULT_FROM,
-         "auto_send": auto_send, "monthly_report": monthly_report}
+         "auto_send": auto_send, "monthly_report": monthly_report, "finance_scan": finance_scan}
 
 
 @app.route("/cron/tick", methods=["GET", "POST"])

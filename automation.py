@@ -18,6 +18,7 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import finance
 import journal
 import registry
 import webpush
@@ -154,9 +155,28 @@ def tick(app_hooks, now=None, sender=webpush.send):
                        "Le găsești în Inbox, gata de printat.", url="/istoric", tag="trimis", sender=sender)
                 done.append(f"trimise automat: {sent_n}")
                 raw = journal.read(fresh=True)
+        # Plățile DSV: extrasele și situațiile noi din mail.
+        if app_hooks.get("finance_scan"):
+            try:
+                notes = app_hooks["finance_scan"]()
+                paid = [n for n in notes if n.get("kind") == "bcr" and n.get("payments")]
+                if paid:
+                    amount = sum(n["amount"] for n in paid)
+                    inv = sorted({i for n in paid for i in n.get("invoices", [])})
+                    notify(raw, f"DSV a plătit {registry.money({'RON': amount})}",
+                           ", ".join(inv[:6]) + (" …" if len(inv) > 6 else "") or "Vezi extrasul.",
+                           url="/facturi?f=platite", tag="plata", sender=sender)
+                    done.append(f"plăți DSV: {len(paid)}")
+                raw = journal.read(fresh=True)
+            except Exception:
+                done.append("verificarea plăților a eșuat")
         if cfg["notify_daily"]:
             s = registry.summary(raw, now.date())
             parts = []
+            late_inv = [i for i in (raw.get("invoices") or {}).values()
+                        if finance.invoice_status(i, now.date()) == "late"]
+            if late_inv:
+                parts.append(f"{len(late_inv)} facturi DSV restante ({registry.money({'RON': sum(i.get('amount') or 0 for i in late_inv)})})")
             if s["docs_due"]:
                 parts.append(f"{s['docs_due']} documente de trimis" + (f" ({s['docs_late']} întârziate)" if s["docs_late"] else ""))
             if s["epod_open"]:

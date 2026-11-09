@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Facturi · Cirforvest{% endblock %}
+{% block body %}
+<div class="top">
+  <div><div class="label">DSV</div><h1>Facturi și plăți</h1></div>
+  <a href="{{ url_for('invoices_csv') }}">CSV</a>
+</div>
+
+{% if total_invoices %}
+<div class="cards">
+  <a class="card {{ 'late' if counts.restante }}" href="{{ url_for('invoices_page', f='restante') }}">
+    <b>{{ money({'RON': late_sum}) if late_sum else '0' }}</b><span>restant · {{ counts.restante }} facturi</span></a>
+  <a class="card {{ 'late' if missing }}" href="{{ url_for('invoices_page', f='lipsa') }}">
+    <b>{{ missing }}</b><span>facturi care nu apar la DSV</span></a>
+  <a class="card wide" href="{{ url_for('invoices_page', f='neplatite') }}">
+    <b style="font-size:1.1rem">{{ money({'RON': open_sum}) if open_sum else '0' }}</b>
+    <span>de încasat în total{% if last_payment %} · ultima plată DSV: {{ pretty(last_payment.date) }}, {{ money({'RON': last_payment.amount}) }}{% endif %}</span></a>
+</div>
+{% endif %}
+
+<section class="section">
+  <h2>De unde știe aplicația</h2>
+  <p class="muted small" style="margin:0">Citește din mail <b>extrasele de cont BCR</b> (plățile DSV, cu facturile plătite), <b>situațiile DSV</b> și <b>desfășurătoarele RoToll</b>. Trimiteți-le pe mail la {{ mail_user }} (de exemplu extrasul lunar din George) și apasă „Verifică plățile” — sau o face singură în fiecare dimineață.</p>
+  <form method="post" action="{{ url_for('invoices_scan') }}" id="scanform" style="margin:0"><button class="primary" type="submit" style="width:100%">Verifică plățile acum</button></form>
+  <form method="post" action="{{ url_for('invoices_upload') }}" enctype="multipart/form-data" class="inline" id="upform">
+    <input type="file" name="doc" id="doc" accept="application/pdf,.pdf" multiple class="vh">
+    <label for="doc" class="btn" style="flex:1">Încarcă un extras / o situație (PDF)</label>
+  </form>
+  {% if orders_without %}<p class="muted small" style="margin:0">{{ orders_without }} comenzi din registru nu au încă factura legată — o alegi în pagina comenzii (aplicația propune după sumă și dată).</p>{% endif %}
+</section>
+
+{% if dsv_text %}
+<details class="section">
+  <summary><span><b>Mesaj pentru DSV</b> (facturile restante și cele lipsă), gata de copiat</span></summary>
+  <div class="copy" style="align-items:flex-start"><code id="dsvtext" style="white-space:pre-wrap">{{ dsv_text }}</code></div>
+  <button type="button" id="copydsv">Copiază mesajul</button>
+</details>
+{% endif %}
+
+<div class="seg" role="group" aria-label="Arată">
+  <a class="segl" href="{{ url_for('invoices_page', f='restante') }}" aria-pressed="{{ 'true' if show == 'restante' else 'false' }}">Restante</a>
+  <a class="segl" href="{{ url_for('invoices_page', f='lipsa') }}" aria-pressed="{{ 'true' if show == 'lipsa' else 'false' }}">Lipsă la DSV</a>
+  <a class="segl" href="{{ url_for('invoices_page', f='neplatite') }}" aria-pressed="{{ 'true' if show == 'neplatite' else 'false' }}">Neplătite</a>
+  <a class="segl" href="{{ url_for('invoices_page', f='platite') }}" aria-pressed="{{ 'true' if show == 'platite' else 'false' }}">Plătite</a>
+</div>
+
+{% if not total_invoices %}
+  <p class="muted">Încă nu știu nicio factură. Apasă „Verifică plățile acum” ca să caut în mail extrasele și situațiile DSV.</p>
+{% elif not rows %}
+  <p class="muted">Nimic aici.</p>
+{% endif %}
+<div class="list">
+{% for i in rows %}
+  <div class="orow">
+    <div class="t"><b>{{ i.no }}</b><span>{{ pretty(i.date) if i.date else '' }}{% if i.amount %} · {{ money({i.currency or 'RON': i.amount}) }}{% endif %}</span></div>
+    <div class="chips">
+      {% if i.status == 'paid' %}<span class="chip ok">Plătită {{ pretty(i.paid) }}</span>
+      {% elif i.status == 'late' %}<span class="chip late">Restantă {{ i.late_days }} zile (scadentă {{ pretty(i.due) }})</span>
+      {% elif i.status == 'missing' %}<span class="chip late">Nu apare la DSV</span>
+      {% else %}<span class="chip todo">Scadentă {{ pretty(i.due) if i.due else '—' }}</span>{% endif %}
+      {% if i.order_no %}<a class="chip" href="{{ url_for('order', no=i.order_no) }}">{{ i.order_no }}{% if i.auto_linked %} (propusă){% endif %}</a>{% endif %}
+      {% if i.paid_ref %}<span class="chip">ref. {{ i.paid_ref }}</span>{% endif %}
+    </div>
+  </div>
+{% endfor %}
+</div>
+<script>
+oncePerSubmit(document.getElementById("scanform"), "Se caută extrasele și situațiile în mail…");
+document.getElementById("doc").addEventListener("change", (e) => { if (e.target.files.length) { showWait("Se citește documentul…"); document.getElementById("upform").submit(); } });
+const c = document.getElementById("copydsv");
+if (c) c.onclick = async () => {
+  try { await navigator.clipboard.writeText(document.getElementById("dsvtext").textContent); c.textContent = "Copiat"; }
+  catch (e) { const r = document.createRange(); r.selectNodeContents(document.getElementById("dsvtext")); getSelection().removeAllRanges(); getSelection().addRange(r); }
+};
+</script>
+{% endblock %}

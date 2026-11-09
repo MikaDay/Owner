@@ -345,6 +345,7 @@ def search():
     numbers = [n.strip().upper() for n in re.split(r"[,\s;]+", request.args.get("nr", "")) if n.strip()][:30]
     if not numbers:
         return redirect(url_for("orders"))
+    back = url_for("orders")
 
     def work(path):
         with Mailbox(**MAIL) as mb:
@@ -353,7 +354,7 @@ def search():
             labels = {m["uid"]: (m["subject"], m["message_id"]) for m in found}
             _, problems = _job_from_mail(mb, labels, orders_only=True, path=path, wanted=set(numbers))
         return problems, f"Nu am găsit {', '.join(numbers)} în mailurile din ultimul an.", \
-            {"title": "Nu am găsit comanda", "back": url_for("orders")}
+            {"title": "Nu am găsit comanda", "back": back}
 
     return redirect(url_for("progress", token=_start_job(work, "Se caută în mail…")))
 
@@ -961,6 +962,7 @@ def _friendly_error(e):
 
 import views_orders  # noqa: E402,F401  (paginile registrului; au nevoie de app și de funcțiile de mai sus)
 import views_auto  # noqa: E402,F401  (notificări, setări, trimitere automată)
+import views_finance  # noqa: E402,F401  (facturi și plăți)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8000")), debug=False)

@@ -91,7 +91,8 @@ def status(order, today=None):
     deadline = docs_deadline(unloading, bool(order.get("international")))
     sent = _day(order.get("docs_sent"))
     paid = _day(order.get("paid"))
-    due = payment_due(sent)
+    # Scadența din factura DSV (dacă factura e cunoscută), altfel 45 de zile de la documente.
+    due = _day(order.get("invoice_due")) or payment_due(sent)
 
     if sent:
         docs = ("ok", f"Documente trimise {sent:%d.%m}")
@@ -112,6 +113,8 @@ def status(order, today=None):
         pay = ("ok", f"Încasat {paid:%d.%m}")
     elif not due:
         pay = ("info", "Plată: după trimiterea documentelor")
+    elif order.get("invoice") and due < today:
+        pay = ("late", f"Factura {order['invoice']} restantă din {due:%d.%m}")
     elif due < today:
         pay = ("late", f"Plată restantă din {due:%d.%m}")
     else:

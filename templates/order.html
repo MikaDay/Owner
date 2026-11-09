@@ -38,6 +38,29 @@
   {% if o.docs_sent %}<form method="post" style="margin:0"><input type="hidden" name="action" value="docs_sent"><input type="hidden" name="value" value=""><button type="submit">Anulează (nu sunt trimise)</button></form>{% endif %}
 </section>
 
+<section class="section" id="factura">
+  <h2>Factură {% if invoice %}<span class="chip {{ {'paid':'ok','late':'late','missing':'late','open':'todo'}[invoice_status] }}">{{ {'paid':'plătită','late':'restantă','missing':'nu apare la DSV','open':'în termen'}[invoice_status] }}</span>{% endif %}</h2>
+  {% if invoice %}
+    <p style="margin:0"><b>{{ invoice.no }}</b>{% if invoice.date %} din {{ pretty(invoice.date) }}{% endif %}{% if invoice.amount %} · {{ money({invoice.currency or 'RON': invoice.amount}) }}{% endif %}
+      {% if invoice.paid %}<br><span class="muted small">Plătită pe {{ pretty(invoice.paid) }}{% if invoice.paid_ref %} (ref. {{ invoice.paid_ref }}){% endif %}{% if invoice.paid_by %}, din {{ invoice.paid_by }}{% endif %}</span>
+      {% elif invoice.due %}<br><span class="muted small">Scadentă {{ pretty(invoice.due) }}</span>{% endif %}
+      {% if invoice.auto_linked %}<br><span class="muted small">Legată automat după sumă și dată — verifică.</span>{% endif %}</p>
+    <form method="post" action="{{ url_for('order_invoice', no=o.order_no) }}" style="margin:0"><input type="hidden" name="invoice" value=""><button type="submit">Nu e factura asta</button></form>
+  {% else %}
+    {% for c in invoice_candidates %}
+    <form method="post" action="{{ url_for('order_invoice', no=o.order_no) }}" style="margin:0">
+      <input type="hidden" name="invoice" value="{{ c.no }}">
+      <button type="submit" style="width:100%;text-align:left">Este {{ c.no }}{% if c.date %} din {{ pretty(c.date) }}{% endif %} · {{ money({c.currency or 'RON': c.amount}) }}{% if c.paid %} · plătită {{ pretty(c.paid) }}{% endif %}</button>
+    </form>
+    {% endfor %}
+    <form method="post" action="{{ url_for('order_invoice', no=o.order_no) }}" class="inline">
+      <input type="text" name="invoice" placeholder="Nr. factură, ex. CIR2132" autocapitalize="characters" aria-label="Număr factură">
+      <button type="submit">Leagă</button>
+    </form>
+    {% if not invoice_candidates %}<p class="muted small" style="margin:0">Nicio factură cunoscută cu suma {{ money({o.currency or 'RON': (o.price or 0) * 1.21}) }} (preț + TVA). Verifică plățile din pagina Facturi sau scrie numărul.</p>{% endif %}
+  {% endif %}
+</section>
+
 <section class="section" id="paid">
   <h2>Plată <span class="chip {{ st.pay[0] }}">{{ st.pay[1] }}</span></h2>
   {% if st.due %}<p class="muted small" style="margin:0">45 de zile de la primirea documentelor: în jur de <b>{{ st.due.strftime('%d.%m.%Y') }}</b> (socotit de la trimiterea lor).</p>{% endif %}
@@ -58,7 +81,8 @@
     <span class="muted">{{ o.currency or 'RON' }}</span>
     <button type="submit">Salvează</button>
   </form>
-  <p class="muted small" style="margin:0">Apare ca rând separat în datele de facturare.</p>
+  <p class="muted small" style="margin:0">Apare ca rând separat în datele de facturare.{% if o.toll_auto %} Completată automat din RoToll (fără TVA).{% endif %}</p>
+  {% for t in toll_trips %}<p class="muted small" style="margin:0">RoToll {{ t.plate }} · {{ t.start[8:10] }}.{{ t.start[5:7] }} {{ t.start[11:16] }} · {{ t.origin[:40] }} → {{ t.destination[:40] }} · {{ t.total }} RON cu TVA</p>{% endfor %}
 </section>
 {% endif %}
 
